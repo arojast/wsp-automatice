@@ -1,6 +1,7 @@
 import type { Message } from 'whatsapp-web.js';
 import { detectIdentifiers } from '../identifiers/detector';
 import { whatsappGroups } from './groups';
+import { findOrCreateChat } from '../database/repositories/chats';
 
 export async function handleIncomingMessage(message: Message): Promise<void> {
     try {
@@ -26,6 +27,15 @@ export async function handleIncomingMessage(message: Message): Promise<void> {
         console.log('Body:', message.body);
         console.log('Identifiers:', identifiers);
         console.log('Timestamp:', message.timestamp);
+
+        let chat = await findOrCreateChat({
+            whatsappChatId: chatId,
+            name: groupName ?? '',
+            isGroup: isGroup,
+        });
+        console.log('++++++++++++++++++++++++++++++++');
+        console.log('Chat record:', chat);
+        console.log('++++++++++++++++++++++++++++++++');
         console.log('--------------------------------');
     } catch (error) {
         console.error('Error processing message:', error);
