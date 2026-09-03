@@ -1,0 +1,17 @@
+export const whatsappGroups: Record<string, string> = {
+    '120363412614082628@g.us': 'Yo',
+    '120363402722492636@g.us': 'tramites Bany',
+    '120363410106583994@g.us': 'Yes solicitudes',
+    '120363405083146621@g.us': 'Ofice Gestorìa',
+    '120363411249029576@g.us': 'Zoohoa Gestores',
+    '120363405177562053@g.us': 'Trámites Lei',
+    '120363430675563414@g.us': 'Croo Gestorìa',
+    '120363429094307481@g.us': 'Gestorìa tejero',
+    '120363412540081006@g.us': 'Sagitario Gestorìa',
+    '120363425597822589@g.us': 'tramites David',
+    '120363409510150634@g.us': 'MENA Gestorìa',
+    '120363428680623878@g.us': 'Dani tramites',
+    '120363377516238038@g.us': 'KR Express',
+    '120363410988391629@g.us': 'Jane solicitudes',
+
+};
