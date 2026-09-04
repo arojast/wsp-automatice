@@ -7,7 +7,7 @@ import {
 export const chats = sqliteTable("chats", {
     id: integer("id").primaryKey({ autoIncrement: true }),
 
-    whatsappChatId: text("whatsapp_chat_id").notNull(),
+    whatsappChatId: text("whatsapp_chat_id").notNull().unique(),
 
     name: text("name"),
 

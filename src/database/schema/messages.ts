@@ -18,7 +18,7 @@ export const messages = sqliteTable("messages", {
 
     senderName: text("sender_name"),
 
-    senderId: text("sender_id").notNull(),
+    senderId: text("sender_id"),
 
     body: text("body").notNull(),
 
