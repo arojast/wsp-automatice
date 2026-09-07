@@ -35,4 +35,14 @@ export const messages = sqliteTable("messages", {
     processingStatus: text("processing_status")
         .notNull()
         .default("pending"),
+
+    isDeleted: integer("is_deleted", {
+        mode: "boolean",
+    })
+        .notNull()
+        .default(false),
+
+    deletedAt: integer("deleted_at", {
+        mode: "timestamp",
+    }),
 });

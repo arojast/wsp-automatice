@@ -18,5 +18,6 @@ export const whatsappGroups: Record<string, string> = {
     '120363429729187829@g.us': 'Solicites enlace',
     '120363429333891771@g.us': 'Erojas',
     '120363430120457208@g.us': 'AG Tramites',
-    '120363430722487919@g.us': 'Paloma Solicitudes'
+    '120363430722487919@g.us': 'Paloma Solicitudes',
+    '120363411578925196@g.us': 'Pame tramites'
 };

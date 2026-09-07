@@ -55,3 +55,13 @@ export async function findOrCreateMessage(data: {
 
     return createMessage(data);
 }
+
+export async function markMessageAsDeleted(whatsappMessageId: string) {
+    return await db
+        .update(messages)
+        .set({
+            isDeleted: true,
+            deletedAt: new Date(),
+        })
+        .where(eq(messages.whatsappMessageId, whatsappMessageId));
+}

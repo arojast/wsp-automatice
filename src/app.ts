@@ -1,6 +1,7 @@
 import qrcode from 'qrcode-terminal';
 import { whatsappClient } from './whatsapp/client';
 import { handleIncomingMessage } from './whatsapp/message-handler';
+import { markMessageAsDeleted } from "./database/repositories/messages";
 
 whatsappClient.on('qr', (qr) => {
     console.log('Scan this QR code with WhatsApp:');
@@ -24,5 +25,18 @@ whatsappClient.on('disconnected', (reason) => {
 });
 
 whatsappClient.on('message', handleIncomingMessage);
+
+whatsappClient.on("message_revoke_everyone",async (message, revokedMsg) => {
+    console.warn("Message deleted:",revokedMsg?.id?.id);
+
+    if (!revokedMsg) {
+        console.warn("Original message not available");
+        return;
+    }
+
+    const update = await markMessageAsDeleted(revokedMsg.id.id);
+
+    console.warn("Database update:", update);
+});
 
 whatsappClient.initialize();
