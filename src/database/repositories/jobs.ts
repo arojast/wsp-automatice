@@ -1,5 +1,6 @@
 import { db } from "../client";
 import { jobs } from "../schema";
+import { and, eq } from "drizzle-orm";
 
 export async function createJob(data: {
     type: string;
@@ -14,5 +15,21 @@ export async function createJob(data: {
             scheduledAt: data.scheduledAt,
         })
         .returning()
+        .get();
+}
+
+export async function findJobByTypeAndMessage(
+    type: string,
+    messageId: number,
+) {
+    return db
+        .select()
+        .from(jobs)
+        .where(
+            and(
+                eq(jobs.type, type),
+                eq(jobs.messageId, messageId),
+            ),
+        )
         .get();
 }

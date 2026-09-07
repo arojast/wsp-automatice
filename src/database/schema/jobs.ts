@@ -1,4 +1,4 @@
-import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { messages } from "./messages";
 
 export const jobStatuses = [
@@ -44,4 +44,7 @@ export const jobs = sqliteTable("jobs", {
     }),
 
     error: text("error"),
-});
+}, (table) => ({
+    typeMessageUnique: uniqueIndex("jobs_type_message_unique")
+        .on(table.type, table.messageId),
+}));

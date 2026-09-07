@@ -7,32 +7,70 @@ import { findMessageById } from '../database/repositories/messages';
 import { reactToMessage } from '../whatsapp/client';
 
 const POLL_INTERVAL = 5_000;
+const PROCESSING_TIMEOUT = 5 * 60_000;
+let processingJobs = false;
 
 async function processJobs(): Promise<void> {
-    const pendingJobs = await db
-        .select()
-        .from(jobs)
-        .where(
-            and(
-                eq(jobs.status, 'PENDING'),
-                lte(jobs.scheduledAt, new Date()),
-            ),
-        )
-        .all();
+    if (processingJobs) {
+        return;
+    }
 
-    for (const job of pendingJobs) {
-        await processJob(job);
+    processingJobs = true;
+
+    try {
+        const staleProcessingBefore = new Date(Date.now() - PROCESSING_TIMEOUT);
+
+        await db
+            .update(jobs)
+            .set({
+                status: 'PENDING',
+                error: null,
+            })
+            .where(
+                and(
+                    eq(jobs.status, 'PROCESSING'),
+                    lte(jobs.createdAt, staleProcessingBefore),
+                ),
+            );
+
+        const pendingJobs = await db
+            .select()
+            .from(jobs)
+            .where(
+                and(
+                    eq(jobs.status, 'PENDING'),
+                    lte(jobs.scheduledAt, new Date()),
+                ),
+            )
+            .all();
+
+        for (const job of pendingJobs) {
+            await processJob(job);
+        }
+    } finally {
+        processingJobs = false;
     }
 }
 
 async function processJob(job: typeof jobs.$inferSelect): Promise<void> {
-    await db
+    const claimedJob = await db
         .update(jobs)
         .set({
             status: 'PROCESSING',
             attempts: job.attempts + 1,
         })
-        .where(eq(jobs.id, job.id));
+        .where(
+            and(
+                eq(jobs.id, job.id),
+                eq(jobs.status, 'PENDING'),
+            ),
+        )
+        .returning()
+        .get();
+
+    if (!claimedJob) {
+        return;
+    }
 
     try {
         if (job.type !== 'REACT_MESSAGE') {

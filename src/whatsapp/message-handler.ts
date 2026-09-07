@@ -5,13 +5,21 @@ import { findOrCreateMessage } from '../database/repositories/messages';
 import { createIdentifiers } from '../database/repositories/identifiers';
 import { findOrCreateCreatingBatch } from '../database/repositories/batches';
 import {
-    reactToMessage,
-    type IncomingWhatsAppMessage,
-} from './client';
+    createJob,
+    findJobByTypeAndMessage,
+} from '../database/repositories/jobs';
+import type { IncomingWhatsAppMessage } from './client';
 
-export async function handleIncomingMessage(
-    message: IncomingWhatsAppMessage,
-): Promise<void> {
+function randomReactionDelay(): number {
+    const minimum = 45_000;
+    const maximum = 90_000;
+
+    return Math.floor(
+        minimum + Math.random() * (maximum - minimum + 1),
+    );
+}
+
+export async function handleIncomingMessage(message: IncomingWhatsAppMessage): Promise<void> {
     try {
         const chatId = message.from;
 
@@ -68,8 +76,22 @@ export async function handleIncomingMessage(
 
         console.log('Identifiers save:', savedIdentifiers);
 
-        await reactToMessage(message.key, '👍');
-        console.log('Message reacted:', message.id);
+        const existingReactionJob = await findJobByTypeAndMessage(
+            'REACT_MESSAGE',
+            savedMessage.id,
+        );
+
+        if (!existingReactionJob) {
+            const reactionJob = await createJob({
+                type: 'REACT_MESSAGE',
+                messageId: savedMessage.id,
+                scheduledAt: new Date(Date.now() + randomReactionDelay()),
+            });
+
+            console.log('Reaction job created:', reactionJob.id);
+        } else {
+            console.log('Reaction job already exists:', existingReactionJob.id);
+        }
         console.log('Message datetime:', messageDatetime);
         console.log('--------------------------------');
     } catch (error) {
