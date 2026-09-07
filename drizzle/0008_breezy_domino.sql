@@ -1,0 +1,1 @@
+DROP INDEX `batches_number_unique`;
