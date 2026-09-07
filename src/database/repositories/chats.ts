@@ -10,6 +10,14 @@ export async function findChatByWhatsappId(whatsappChatId: string) {
         .get();
 }
 
+export async function findChatById(id: number) {
+    return db
+        .select()
+        .from(chats)
+        .where(eq(chats.id, id))
+        .get();
+}
+
 export async function createChat(data: {
     whatsappChatId: string;
     name: string;

@@ -65,3 +65,11 @@ export async function markMessageAsDeleted(whatsappMessageId: string) {
         })
         .where(eq(messages.whatsappMessageId, whatsappMessageId));
 }
+
+export async function findMessageById(id: number) {
+    return db
+        .select()
+        .from(messages)
+        .where(eq(messages.id, id))
+        .get();
+}
