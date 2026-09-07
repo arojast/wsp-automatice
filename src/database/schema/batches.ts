@@ -15,7 +15,7 @@ export type BatchStatus = (typeof batchStatuses)[number];
 export const batches = sqliteTable("batches", {
     id: integer("id").primaryKey({ autoIncrement: true }),
 
-    number: integer("number").notNull().unique(),
+    number: integer("number").notNull(),
 
     status: text("status", {
         enum: batchStatuses,

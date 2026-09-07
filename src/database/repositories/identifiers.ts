@@ -23,7 +23,7 @@ export async function createIdentifiers(data: {
         chatId: number;
         value: string;
         type: string;
-        batchId?: number | null;
+        batchId: number;
 }[]) {
     const savedIdentifiers = [];
 
@@ -40,7 +40,7 @@ export async function createIdentifiers(data: {
 
         const saved = await db
             .insert(identifiers)
-            .values(identifier)
+            .values([identifier])
             .returning()
             .get();
 

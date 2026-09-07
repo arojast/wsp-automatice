@@ -1,42 +1,6 @@
-import qrcode from 'qrcode-terminal';
-import { whatsappClient } from './whatsapp/client';
+import { startWhatsAppClient } from './whatsapp/client';
 import { handleIncomingMessage } from './whatsapp/message-handler';
-import { markMessageAsDeleted } from "./database/repositories/messages";
 
-whatsappClient.on('qr', (qr) => {
-    console.log('Scan this QR code with WhatsApp:');
-    qrcode.generate(qr, { small: true });
+startWhatsAppClient(handleIncomingMessage).catch((error) => {
+    console.error('WhatsApp client error:', error);
 });
-
-whatsappClient.on('authenticated', () => {
-    console.log('WhatsApp authenticated!');
-});
-
-whatsappClient.on('ready', () => {
-    console.log('WhatsApp client is ready!');
-});
-
-whatsappClient.on('auth_failure', (message) => {
-    console.error('Authentication failure:', message);
-});
-
-whatsappClient.on('disconnected', (reason) => {
-    console.log('WhatsApp disconnected:', reason);
-});
-
-whatsappClient.on('message', handleIncomingMessage);
-
-whatsappClient.on("message_revoke_everyone",async (message, revokedMsg) => {
-    console.warn("Message deleted:",revokedMsg?.id?.id);
-
-    if (!revokedMsg) {
-        console.warn("Original message not available");
-        return;
-    }
-
-    const update = await markMessageAsDeleted(revokedMsg.id.id);
-
-    console.warn("Database update:", update);
-});
-
-whatsappClient.initialize();
