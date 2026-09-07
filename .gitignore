@@ -8,3 +8,4 @@ dist/
 
 data/*.sqlite
 data/*.db
+drizzle/meta/
