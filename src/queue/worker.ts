@@ -137,7 +137,12 @@ async function processJob(job: typeof jobs.$inferSelect): Promise<void> {
             })
             .where(eq(jobs.id, job.id));
 
-        console.log('Reaction job completed:', job.id);
+        console.log(
+            job.type === 'SEND_DOCUMENT'
+                ? 'Document job completed:'
+                : 'Reaction job completed:',
+            job.id,
+        );
     } catch (error) {
         if (job.type === 'SEND_DOCUMENT' && job.documentId) {
             await markDocumentAsError(job.documentId);

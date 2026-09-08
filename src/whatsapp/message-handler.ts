@@ -10,6 +10,7 @@ import { findOrCreateCreatingBatch, markCreatingBatchAsSent } from '../database/
 import {
     createJob,
     findJobByTypeAndMessage,
+    scheduleDocumentJobsByBatch,
 } from '../database/repositories/jobs';
 import {
     sendWhatsAppMessage,
@@ -20,7 +21,9 @@ import { saveZipDocuments } from '../documents/zip-processor';
 const configuredAdminJid = process.env.ADMIN_WHATSAPP_JID;
 let awaitingBatchId = false;
 let awaitingZipBatchId = false;
+let awaitingScheduleBatchId = false;
 let zipBatchId: number | null = null;
+let scheduleZipJobs = true;
 
 if (!configuredAdminJid) {
     throw new Error('ADMIN_WHATSAPP_JID is not configured');
@@ -78,10 +81,22 @@ async function handleAdminMessage(message: IncomingWhatsAppMessage): Promise<voi
         return;
     }
 
-    // Command -3: request a batch ID and receive its ZIP file with PDFs.
-    if (command === '-3') {
+    // Command -3: upload a ZIP and schedule its document jobs immediately.
+    // Command -4: upload a ZIP and leave its document jobs without a date.
+    if (command === '-3' || command === '-4') {
         awaitingZipBatchId = true;
         awaitingBatchId = false;
+        awaitingScheduleBatchId = false;
+        scheduleZipJobs = command === '-3';
+        await sendWhatsAppMessage(replyTo, 'Ingrese el numero del batch');
+        return;
+    }
+
+    // Command -5: assign dates to previously loaded document jobs.
+    if (command === '-5') {
+        awaitingScheduleBatchId = true;
+        awaitingBatchId = false;
+        awaitingZipBatchId = false;
         await sendWhatsAppMessage(replyTo, 'Ingrese el numero del batch');
         return;
     }
@@ -129,9 +144,26 @@ async function handleAdminMessage(message: IncomingWhatsAppMessage): Promise<voi
         return;
     }
 
+    if (awaitingScheduleBatchId) {
+        if (!/^\d+$/.test(command)) {
+            await sendWhatsAppMessage(replyTo, 'El numero del batch debe ser un entero.');
+            return;
+        }
+
+        awaitingScheduleBatchId = false;
+        const scheduledJobs = await scheduleDocumentJobsByBatch(Number(command));
+        await sendWhatsAppMessage(
+            replyTo,
+            scheduledJobs > 0
+                ? `${scheduledJobs} archivo(s) programado(s) para envio.`
+                : `No hay archivos pendientes sin fecha para el batch ${command}.`,
+        );
+        return;
+    }
+
     if (zipBatchId !== null && !command) {
         try {
-            const result = await saveZipDocuments(message, zipBatchId);
+            const result = await saveZipDocuments(message, zipBatchId, scheduleZipJobs);
             await sendWhatsAppMessage(
                 replyTo,
                 [

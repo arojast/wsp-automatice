@@ -31,6 +31,7 @@ function birthDatePart(value: string): string | null {
 export async function saveZipDocuments(
     message: IncomingWhatsAppMessage,
     batchId: number,
+    scheduleJobs = true,
 ): Promise<{ saved: string[]; unmatched: string[] }> {
     const document = await downloadIncomingDocument(message);
 
@@ -124,6 +125,7 @@ export async function saveZipDocuments(
                     existingDocument.id,
                     identifier.messageId,
                     documentQueueOffset,
+                    scheduleJobs,
                 );
                 documentQueueOffset += 1_000;
             }
@@ -143,6 +145,7 @@ export async function saveZipDocuments(
             savedDocument.id,
             identifier.messageId,
             documentQueueOffset,
+            scheduleJobs,
         );
         documentQueueOffset += 1_000;
         matchedIdentifierIds.add(identifier.identifierId);
@@ -156,6 +159,7 @@ async function enqueueDocumentJob(
     documentId: number,
     messageId: number,
     delay: number,
+    scheduleJob: boolean,
 ): Promise<void> {
     const existingJob = await findJobByTypeAndDocument(
         'SEND_DOCUMENT',
@@ -167,7 +171,9 @@ async function enqueueDocumentJob(
             type: 'SEND_DOCUMENT',
             messageId,
             documentId,
-            scheduledAt: new Date(Date.now() + delay),
+            scheduledAt: scheduleJob
+                ? new Date(Date.now() + delay)
+                : null,
         });
     }
 }
