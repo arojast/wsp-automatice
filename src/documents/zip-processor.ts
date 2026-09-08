@@ -32,7 +32,14 @@ export async function saveZipDocuments(
     message: IncomingWhatsAppMessage,
     batchId: number,
     scheduleJobs = true,
-): Promise<{ saved: string[]; unmatched: string[] }> {
+): Promise<{
+    saved: string[];
+    unmatched: string[];
+    missingIdentifiers: Array<{
+        chatName: string | null;
+        identifier: string;
+    }>;
+}> {
     const document = await downloadIncomingDocument(message);
 
     if (!document || !document.filename.toLowerCase().endsWith('.zip')) {
@@ -152,7 +159,14 @@ export async function saveZipDocuments(
         saved.push(filename);
     }
 
-    return { saved, unmatched };
+    const missingIdentifiers = batchIdentifiers
+        .filter((item) => !matchedIdentifierIds.has(item.identifierId))
+        .map((item) => ({
+            chatName: item.chatName,
+            identifier: item.identifier,
+        }));
+
+    return { saved, unmatched, missingIdentifiers };
 }
 
 async function enqueueDocumentJob(

@@ -45,6 +45,26 @@ async function handleAdminMessage(message: IncomingWhatsAppMessage): Promise<voi
     const command = message.body.trim();
     const replyTo = message.key.remoteJid ?? ADMIN_JID;
 
+    // Command -0: show the administrator command menu.
+    if (command === '-0') {
+        await sendWhatsAppMessage(
+            replyTo,
+            [
+                'Menu de comandos:',
+                '-0 Mostrar este menu',
+                '-1 Marcar el batch actual como SENT',
+                '-2 Consultar identificadores de un batch',
+                '-3 Cargar ZIP y programar envio de PDFs',
+                '-4 Cargar ZIP sin programar envio',
+                '-5 Programar envio de PDFs cargados',
+                '-6 Consultar estado de lectura',
+                '-7 Pausar lectura de mensajes de grupos',
+                '-8 Reactivar lectura de mensajes de grupos',
+            ].join('\n'),
+        );
+        return;
+    }
+
     // Command -1: mark the current creating batch as sent and return its identifiers.
     if (command === '-1') {
         const sentBatch = await markCreatingBatchAsSent();
@@ -102,8 +122,19 @@ async function handleAdminMessage(message: IncomingWhatsAppMessage): Promise<voi
         return;
     }
 
-    // Command -6: stop saving and processing incoming group messages.
+    // Command -6: report whether incoming group messages are being processed.
     if (command === '-6') {
+        await sendWhatsAppMessage(
+            replyTo,
+            groupMessageProcessingEnabled
+                ? 'La lectura y el procesamiento de mensajes esta ACTIVO.'
+                : 'La lectura y el procesamiento de mensajes esta PAUSADO.',
+        );
+        return;
+    }
+
+    // Command -7: stop saving and processing incoming group messages.
+    if (command === '-7') {
         groupMessageProcessingEnabled = false;
         await sendWhatsAppMessage(
             replyTo,
@@ -112,13 +143,13 @@ async function handleAdminMessage(message: IncomingWhatsAppMessage): Promise<voi
         return;
     }
 
-    // Command -7: resume saving and processing incoming group messages.
-    if (command === '-7') {
-        groupMessageProcessingEnabled = true;
+    // Command -8: resume saving and processing incoming group messages.
+    if (command === '-8') {
         await sendWhatsAppMessage(
             replyTo,
             'El procesamiento de mensajes de grupos ha sido reactivado.',
         );
+        groupMessageProcessingEnabled = true;
         return;
     }
 
@@ -193,6 +224,11 @@ async function handleAdminMessage(message: IncomingWhatsAppMessage): Promise<voi
                     '',
                     `PDFs no asociados: ${result.unmatched.length}`,
                     result.unmatched.join('\n') || 'Ninguno',
+                    '',
+                    `Identificadores sin documento: ${result.missingIdentifiers.length}`,
+                    result.missingIdentifiers.length > 0
+                        ? formatMissingIdentifiers(result.missingIdentifiers)
+                        : 'Ninguno',
                 ].join('\n'),
             );
         } catch (error) {
@@ -201,6 +237,26 @@ async function handleAdminMessage(message: IncomingWhatsAppMessage): Promise<voi
             zipBatchId = null;
         }
     }
+}
+
+function formatMissingIdentifiers(
+    missingIdentifiers: Array<{
+        chatName: string | null;
+        identifier: string;
+    }>,
+): string {
+    const groupedIdentifiers = new Map<string, string[]>();
+
+    for (const item of missingIdentifiers) {
+        const groupName = item.chatName ?? 'Sin nombre';
+        const identifiers = groupedIdentifiers.get(groupName) ?? [];
+        identifiers.push(item.identifier);
+        groupedIdentifiers.set(groupName, identifiers);
+    }
+
+    return [...groupedIdentifiers.entries()]
+        .map(([groupName, identifiers]) => [groupName, ...identifiers].join('\n'))
+        .join('\n\n');
 }
 
 export async function handleIncomingMessage(message: IncomingWhatsAppMessage): Promise<void> {
