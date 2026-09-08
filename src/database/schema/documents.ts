@@ -1,5 +1,6 @@
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { identifiers } from "./identifiers";
+import { datetime } from '../types';
 
 export const documentStatuses = [
   "RECEIVED",
@@ -20,13 +21,9 @@ export const documents = sqliteTable("documents", {
 
   filePath: text("file_path").notNull(),
 
-  receivedAt: integer("received_at", {
-    mode: "timestamp",
-  }),
+  receivedAt: datetime("received_at"),
 
-  sentAt: integer("sent_at", {
-    mode: "timestamp",
-  }),
+  sentAt: datetime("sent_at"),
 
   status: text("status", {
     enum: documentStatuses,

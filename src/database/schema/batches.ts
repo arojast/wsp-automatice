@@ -1,4 +1,5 @@
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { datetime } from '../types';
 
 export const batchStatuses = [
     "CREATING",
@@ -23,22 +24,14 @@ export const batches = sqliteTable("batches", {
         .notNull()
         .default("CREATING"),
 
-    createdAt: integer("created_at", {
-        mode: "timestamp",
-    })
+    createdAt: datetime("created_at")
         .notNull()
         .$defaultFn(() => new Date()),
 
-    sentAt: integer("sent_at", {
-        mode: "timestamp",
-    }),
+    sentAt: datetime("sent_at"),
 
-    zipReceivedAt: integer("zip_received_at", {
-        mode: "timestamp",
-    }),
+    zipReceivedAt: datetime("zip_received_at"),
 
-    completedAt: integer("completed_at", {
-        mode: "timestamp",
-    }),
+    completedAt: datetime("completed_at"),
     
 });

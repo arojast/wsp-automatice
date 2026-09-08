@@ -4,6 +4,7 @@ import {
     text,
 } from "drizzle-orm/sqlite-core";
 import { chats } from "./chats";
+import { datetime } from '../types';
 
 export const messages = sqliteTable("messages", {
     id: integer("id").primaryKey({ autoIncrement: true }),
@@ -22,13 +23,9 @@ export const messages = sqliteTable("messages", {
 
     body: text("body").notNull(),
 
-    messageDatetime: integer("message_datetime", {
-        mode: "timestamp",
-    }).notNull(),
+    messageDatetime: datetime("message_datetime").notNull(),
 
-    createdAt: integer("created_at", {
-        mode: "timestamp",
-    })
+    createdAt: datetime("created_at")
         .notNull()
         .$defaultFn(() => new Date()),
 
@@ -42,7 +39,5 @@ export const messages = sqliteTable("messages", {
         .notNull()
         .default(false),
 
-    deletedAt: integer("deleted_at", {
-        mode: "timestamp",
-    }),
+    deletedAt: datetime("deleted_at"),
 });

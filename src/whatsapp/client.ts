@@ -1,4 +1,5 @@
 import type { WAMessage, WAMessageKey } from '@whiskeysockets/baileys';
+import { readFile } from 'node:fs/promises';
 import { Boom } from '@hapi/boom';
 import qrcode from 'qrcode-terminal';
 
@@ -11,6 +12,12 @@ export type IncomingWhatsAppMessage = {
     id: string;
     key: WAMessageKey;
     rawData: WAMessage;
+};
+
+export type IncomingDocument = {
+    data: Buffer;
+    filename: string;
+    mimetype: string;
 };
 
 type WhatsAppSocket = ReturnType<
@@ -32,11 +39,16 @@ function getMessageBody(message: WAMessage): string {
     );
 }
 
+function getDocumentMessage(message: WAMessage) {
+    return message.message?.documentMessage ??
+        message.message?.documentWithCaptionMessage?.message?.documentMessage;
+}
+
 function toIncomingMessage(message: WAMessage): IncomingWhatsAppMessage | null {
     const chatId = message.key.remoteJid;
     const body = getMessageBody(message);
 
-    if (!chatId || !message.key.id || !body) {
+    if (!chatId || !message.key.id || (!body && !getDocumentMessage(message))) {
         return null;
     }
 
@@ -150,4 +162,47 @@ export async function sendWhatsAppMessage(
     }
 
     await whatsappSocket.sendMessage(jid, { text });
+}
+
+export async function sendWhatsAppDocument(
+    jid: string,
+    filePath: string,
+    filename: string,
+): Promise<void> {
+    if (!whatsappSocket) {
+        throw new Error('WhatsApp socket is not ready');
+    }
+
+    await whatsappSocket.sendMessage(jid, {
+        document: await readFile(filePath),
+        mimetype: 'application/pdf',
+        fileName: filename,
+    });
+}
+
+export async function downloadIncomingDocument(
+    message: IncomingWhatsAppMessage,
+): Promise<IncomingDocument | null> {
+    const documentMessage = getDocumentMessage(message.rawData);
+
+    if (!documentMessage) {
+        return null;
+    }
+
+    const { downloadMediaMessage } = await import('@whiskeysockets/baileys');
+    const data = await downloadMediaMessage(
+        message.rawData,
+        'buffer',
+        {},
+        {
+            reuploadRequest: async (staleMessage) => staleMessage,
+            logger: console as never,
+        },
+    );
+
+    return {
+        data: data as Buffer,
+        filename: documentMessage.fileName ?? 'received-document',
+        mimetype: documentMessage.mimetype ?? 'application/octet-stream',
+    };
 }

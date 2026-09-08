@@ -6,6 +6,7 @@ import {
 import { chats } from "./chats";
 import { messages } from "./messages";
 import { batches } from "./batches";
+import { datetime } from '../types';
 
 export const identifiers = sqliteTable("identifiers", {
     id: integer("id").primaryKey({ autoIncrement: true }),
@@ -26,9 +27,7 @@ export const identifiers = sqliteTable("identifiers", {
 
     type: text("type").notNull(),
 
-    createdAt: integer("created_at", {
-        mode: "timestamp",
-    })
+    createdAt: datetime("created_at")
         .notNull()
         .$defaultFn(() => new Date()),
 });

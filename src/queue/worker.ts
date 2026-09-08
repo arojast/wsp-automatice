@@ -4,11 +4,26 @@ import type { WAMessageKey } from '@whiskeysockets/baileys';
 import { db } from '../database/client';
 import { jobs } from '../database/schema';
 import { findMessageById } from '../database/repositories/messages';
-import { reactToMessage } from '../whatsapp/client';
+import {
+    findDocumentForSending,
+    markDocumentAsError,
+    markDocumentAsSent,
+} from '../database/repositories/documents';
+import {
+    reactToMessage,
+    sendWhatsAppDocument,
+} from '../whatsapp/client';
+import { readFile } from 'node:fs/promises';
 
 const POLL_INTERVAL = 5_000;
 const PROCESSING_TIMEOUT = 5 * 60_000;
+const MIN_DOCUMENT_SEND_INTERVAL = 1_000;
 let processingJobs = false;
+let lastDocumentSentAt = 0;
+
+function wait(milliseconds: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
 
 async function processJobs(): Promise<void> {
     if (processingJobs) {
@@ -73,21 +88,46 @@ async function processJob(job: typeof jobs.$inferSelect): Promise<void> {
     }
 
     try {
-        if (job.type !== 'REACT_MESSAGE') {
+        if (job.type === 'REACT_MESSAGE') {
+            const databaseMessage = await findMessageById(job.messageId);
+
+            if (!databaseMessage) {
+                throw new Error(`Database message ${job.messageId} not found`);
+            }
+
+            const messageKey = JSON.parse(
+                databaseMessage.whatsappMessageId,
+            ) as WAMessageKey;
+
+            await reactToMessage(messageKey, '👍');
+        } else if (job.type === 'SEND_DOCUMENT') {
+            if (!job.documentId) {
+                throw new Error(`SEND_DOCUMENT job ${job.id} has no documentId`);
+            }
+
+            const document = await findDocumentForSending(job.documentId);
+
+            if (!document) {
+                throw new Error(`Document ${job.documentId} not found`);
+            }
+
+            const elapsed = Date.now() - lastDocumentSentAt;
+
+            if (elapsed < MIN_DOCUMENT_SEND_INTERVAL) {
+                await wait(MIN_DOCUMENT_SEND_INTERVAL - elapsed);
+            }
+
+            await readFile(document.filePath);
+            await sendWhatsAppDocument(
+                document.whatsappChatId,
+                document.filePath,
+                document.filename,
+            );
+            await markDocumentAsSent(document.id);
+            lastDocumentSentAt = Date.now();
+        } else {
             throw new Error(`Unsupported job type: ${job.type}`);
         }
-
-        const databaseMessage = await findMessageById(job.messageId);
-
-        if (!databaseMessage) {
-            throw new Error(`Database message ${job.messageId} not found`);
-        }
-
-        const messageKey = JSON.parse(
-            databaseMessage.whatsappMessageId,
-        ) as WAMessageKey;
-
-        await reactToMessage(messageKey, '👍');
 
         await db
             .update(jobs)
@@ -99,6 +139,10 @@ async function processJob(job: typeof jobs.$inferSelect): Promise<void> {
 
         console.log('Reaction job completed:', job.id);
     } catch (error) {
+        if (job.type === 'SEND_DOCUMENT' && job.documentId) {
+            await markDocumentAsError(job.documentId);
+        }
+
         await db
             .update(jobs)
             .set({

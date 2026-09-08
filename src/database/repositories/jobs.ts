@@ -5,6 +5,7 @@ import { and, eq } from "drizzle-orm";
 export async function createJob(data: {
     type: string;
     messageId: number;
+    documentId?: number;
     scheduledAt: Date;
 }) {
     return db
@@ -12,9 +13,26 @@ export async function createJob(data: {
         .values({
             type: data.type,
             messageId: data.messageId,
+            documentId: data.documentId,
             scheduledAt: data.scheduledAt,
         })
         .returning()
+        .get();
+}
+
+export async function findJobByTypeAndDocument(
+    type: string,
+    documentId: number,
+) {
+    return db
+        .select()
+        .from(jobs)
+        .where(
+            and(
+                eq(jobs.type, type),
+                eq(jobs.documentId, documentId),
+            ),
+        )
         .get();
 }
 

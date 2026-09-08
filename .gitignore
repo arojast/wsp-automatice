@@ -9,4 +9,5 @@ data/baileys-auth/
 
 data/*.sqlite
 data/*.db
+data/documents/*
 drizzle/meta/

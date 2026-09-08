@@ -3,6 +3,7 @@ import {
     sqliteTable,
     text,
 } from "drizzle-orm/sqlite-core";
+import { datetime } from '../types';
 
 export const chats = sqliteTable("chats", {
     id: integer("id").primaryKey({ autoIncrement: true }),
@@ -15,11 +16,11 @@ export const chats = sqliteTable("chats", {
         .notNull()
         .default(false),
 
-    createdAt: integer("created_at", { mode: "timestamp" })
+    createdAt: datetime("created_at")
         .notNull()
         .$defaultFn(() => new Date()),
 
-    updatedAt: integer("updated_at", { mode: "timestamp" })
+    updatedAt: datetime("updated_at")
         .notNull()
         .$defaultFn(() => new Date()),
 });

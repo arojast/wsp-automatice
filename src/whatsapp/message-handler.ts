@@ -2,22 +2,31 @@ import { detectIdentifiers } from '../identifiers/detector';
 import { whatsappGroups } from './groups';
 import { findOrCreateChat } from '../database/repositories/chats';
 import { findOrCreateMessage } from '../database/repositories/messages';
-import { createIdentifiers } from '../database/repositories/identifiers';
-import { findIdentifiersByBatchId } from '../database/repositories/identifiers';
-import { findOrCreateCreatingBatch } from '../database/repositories/batches';
+import {
+    createIdentifiers,
+    findIdentifiersByBatchId,
+} from '../database/repositories/identifiers';
+import { findOrCreateCreatingBatch, markCreatingBatchAsSent } from '../database/repositories/batches';
 import {
     createJob,
     findJobByTypeAndMessage,
 } from '../database/repositories/jobs';
-import { markCreatingBatchAsSent } from '../database/repositories/batches';
-import { sendWhatsAppMessage, type IncomingWhatsAppMessage } from './client';
+import {
+    sendWhatsAppMessage,
+    type IncomingWhatsAppMessage,
+} from './client';
+import { saveZipDocuments } from '../documents/zip-processor';
 
-const ADMIN_JID = process.env.ADMIN_WHATSAPP_JID;
+const configuredAdminJid = process.env.ADMIN_WHATSAPP_JID;
 let awaitingBatchId = false;
+let awaitingZipBatchId = false;
+let zipBatchId: number | null = null;
 
-if (!ADMIN_JID) {
+if (!configuredAdminJid) {
     throw new Error('ADMIN_WHATSAPP_JID is not configured');
 }
+
+const ADMIN_JID: string = configuredAdminJid;
 
 function randomReactionDelay(): number {
     const minimum = 45_000;
@@ -28,112 +37,129 @@ function randomReactionDelay(): number {
     );
 }
 
+async function handleAdminMessage(message: IncomingWhatsAppMessage): Promise<void> {
+    const command = message.body.trim();
+    const replyTo = message.key.remoteJid ?? ADMIN_JID;
+
+    // Command -1: mark the current creating batch as sent and return its identifiers.
+    if (command === '-1') {
+        const sentBatch = await markCreatingBatchAsSent();
+
+        if (!sentBatch) {
+            await sendWhatsAppMessage(replyTo, 'No hay un batch activo en estado CREATING.');
+            return;
+        }
+
+        await sendWhatsAppMessage(
+            replyTo,
+            [
+                'Batch enviado:',
+                `ID: ${sentBatch.id}`,
+                `Numero: ${sentBatch.number}`,
+                `Estado: ${sentBatch.status}`,
+                `Sent at: ${sentBatch.sentAt?.toISOString() ?? 'N/A'}`,
+            ].join('\n'),
+        );
+
+        const batchIdentifiers = await findIdentifiersByBatchId(sentBatch.id);
+        await sendWhatsAppMessage(
+            replyTo,
+            batchIdentifiers.length > 0
+                ? batchIdentifiers.map(({ identifier }) => identifier).join('\n')
+                : 'No hay identificadores en este batch.',
+        );
+        return;
+    }
+
+    // Command -2: request a batch ID and return its identifiers grouped by chat.
+    if (command === '-2') {
+        awaitingBatchId = true;
+        await sendWhatsAppMessage(replyTo, 'Ingrese el id del batch a consultar');
+        return;
+    }
+
+    // Command -3: request a batch ID and receive its ZIP file with PDFs.
+    if (command === '-3') {
+        awaitingZipBatchId = true;
+        awaitingBatchId = false;
+        await sendWhatsAppMessage(replyTo, 'Ingrese el numero del batch');
+        return;
+    }
+
+    if (awaitingBatchId) {
+        if (!/^\d+$/.test(command)) {
+            await sendWhatsAppMessage(replyTo, 'El id del batch debe ser un numero entero.');
+            return;
+        }
+
+        awaitingBatchId = false;
+        const batchIdentifiers = await findIdentifiersByBatchId(Number(command));
+
+        if (batchIdentifiers.length === 0) {
+            await sendWhatsAppMessage(replyTo, `No hay identificadores para el batch ${command}.`);
+            return;
+        }
+
+        const groupedIdentifiers = new Map<string, string[]>();
+
+        for (const item of batchIdentifiers) {
+            const groupName = item.chatName ?? 'Sin nombre';
+            const groupIdentifiers = groupedIdentifiers.get(groupName) ?? [];
+            groupIdentifiers.push(item.identifier);
+            groupedIdentifiers.set(groupName, groupIdentifiers);
+        }
+
+        const response = [...groupedIdentifiers.entries()]
+            .map(([groupName, identifiers]) => [groupName, ...identifiers].join('\n'))
+            .join('\n\n');
+
+        await sendWhatsAppMessage(replyTo, response);
+        return;
+    }
+
+    if (awaitingZipBatchId) {
+        if (!/^\d+$/.test(command)) {
+            await sendWhatsAppMessage(replyTo, 'El numero del batch debe ser un entero.');
+            return;
+        }
+
+        zipBatchId = Number(command);
+        awaitingZipBatchId = false;
+        await sendWhatsAppMessage(replyTo, 'Envie el archivo ZIP con los PDFs.');
+        return;
+    }
+
+    if (zipBatchId !== null && !command) {
+        try {
+            const result = await saveZipDocuments(message, zipBatchId);
+            await sendWhatsAppMessage(
+                replyTo,
+                [
+                    `PDFs guardados: ${result.saved.length}`,
+                    result.saved.join('\n') || 'Ninguno',
+                    '',
+                    `PDFs no asociados: ${result.unmatched.length}`,
+                    result.unmatched.join('\n') || 'Ninguno',
+                ].join('\n'),
+            );
+        } catch (error) {
+            await sendWhatsAppMessage(replyTo, `No se pudo procesar el ZIP: ${String(error)}`);
+        } finally {
+            zipBatchId = null;
+        }
+    }
+}
+
 export async function handleIncomingMessage(message: IncomingWhatsAppMessage): Promise<void> {
     try {
         const chatId = message.from;
 
         if (!chatId.endsWith('@g.us')) {
             if (chatId === ADMIN_JID) {
-                const command = message.body.trim();
-
-                // Handle admin commands
-                // Command 1: Mark the current creating batch as sent and return its details
-                if (command === '1') {
-                    const sentBatch = await markCreatingBatchAsSent();
-
-                    if (!sentBatch) {
-                        await sendWhatsAppMessage(
-                            message.key.remoteJid ?? ADMIN_JID,
-                            'No hay un batch activo en estado CREATING.',
-                        );
-                        return;
-                    }
-
-                    await sendWhatsAppMessage(
-                        message.key.remoteJid ?? ADMIN_JID,
-                        [
-                            'Batch enviado:',
-                            `ID: ${sentBatch.id}`,
-                            `Numero: ${sentBatch.number}`,
-                            `Estado: ${sentBatch.status}`,
-                            `Sent at: ${sentBatch.sentAt?.toISOString() ?? 'N/A'}`,
-                        ].join('\n'),
-                    );
-
-                    const batchIdentifiers = await findIdentifiersByBatchId(
-                        sentBatch.id,
-                    );
-                    const identifiersMessage = batchIdentifiers.length > 0
-                        ? batchIdentifiers.map(({ identifier }) => identifier).join('\n')
-                        : 'No hay identificadores en este batch.';
-
-                    await sendWhatsAppMessage(
-                        message.key.remoteJid ?? ADMIN_JID,
-                        identifiersMessage,
-                    );
-
-                    console.log('Batch marked as SENT:', sentBatch.id);
-                }
-
-                // Command 2: Request the batch ID to query its identifiers
-                // and then return the identifiers for that batch with their corresponding group names
-                if (command === '2') {
-                    awaitingBatchId = true;
-                    await sendWhatsAppMessage(
-                        message.key.remoteJid ?? ADMIN_JID,
-                        'Ingrese el id del batch a consultar',
-                    );
-                    return;
-                }
-
-                if (awaitingBatchId) {
-                    if (!/^\d+$/.test(command)) {
-                        await sendWhatsAppMessage(
-                            message.key.remoteJid ?? ADMIN_JID,
-                            'El id del batch debe ser un numero entero.',
-                        );
-                        return;
-                    }
-
-                    awaitingBatchId = false;
-                    const batchId = Number(command);
-                    const batchIdentifiers = await findIdentifiersByBatchId(batchId);
-
-                    if (batchIdentifiers.length === 0) {
-                        await sendWhatsAppMessage(
-                            message.key.remoteJid ?? ADMIN_JID,
-                            `No hay identificadores para el batch ${batchId}.`,
-                        );
-                        return;
-                    }
-
-                    const groupedIdentifiers = new Map<string, string[]>();
-
-                    for (const item of batchIdentifiers) {
-                        const groupName = item.chatName ?? 'Sin nombre';
-                        const groupIdentifiers = groupedIdentifiers.get(groupName) ?? [];
-                        groupIdentifiers.push(item.identifier);
-                        groupedIdentifiers.set(groupName, groupIdentifiers);
-                    }
-
-                    const response = [...groupedIdentifiers.entries()]
-                        .map(([groupName, groupIdentifiers]) => (
-                            [groupName, ...groupIdentifiers].join('\n')
-                        ))
-                        .join('\n\n');
-
-                    await sendWhatsAppMessage(
-                        message.key.remoteJid ?? ADMIN_JID,
-                        response,
-                    );
-                    return;
-                }
-            }
-
-            if (chatId !== ADMIN_JID) {
+                await handleAdminMessage(message);
+            } else {
                 console.log('Ignoring private chat');
             }
-
             return;
         }
 
@@ -151,12 +177,6 @@ export async function handleIncomingMessage(message: IncomingWhatsAppMessage): P
         });
         const messageDatetime = new Date(message.timestamp * 1000);
         const whatsappMessageId = JSON.stringify(message.key);
-
-        console.log('--------------------------------');
-        console.log('Chat ID:', chatId);
-        console.log('Group name:', groupName);
-        console.log('Database chat ID:', chat.id);
-
         const savedMessage = await findOrCreateMessage({
             whatsappMessageId,
             chatId: chat.id,
@@ -166,14 +186,8 @@ export async function handleIncomingMessage(message: IncomingWhatsAppMessage): P
             messageDatetime,
         });
 
-        console.log('Database message ID:', savedMessage.id);
-        console.log('Sender ID:', message.author);
-        console.log('Sender name:', message.senderName);
-        console.log('Body:', message.body);
-        console.log('Identifiers:', identifiers);
-
         const batch = await findOrCreateCreatingBatch();
-        const savedIdentifiers = await createIdentifiers(
+        await createIdentifiers(
             identifiers.map((identifier) => ({
                 messageId: savedMessage.id,
                 chatId: chat.id,
@@ -183,26 +197,18 @@ export async function handleIncomingMessage(message: IncomingWhatsAppMessage): P
             })),
         );
 
-        console.log('Identifiers save:', savedIdentifiers);
-
         const existingReactionJob = await findJobByTypeAndMessage(
             'REACT_MESSAGE',
             savedMessage.id,
         );
 
         if (!existingReactionJob) {
-            const reactionJob = await createJob({
+            await createJob({
                 type: 'REACT_MESSAGE',
                 messageId: savedMessage.id,
                 scheduledAt: new Date(Date.now() + randomReactionDelay()),
             });
-
-            console.log('Reaction job created:', reactionJob.id);
-        } else {
-            console.log('Reaction job already exists:', existingReactionJob.id);
         }
-        console.log('Message datetime:', messageDatetime);
-        console.log('--------------------------------');
     } catch (error) {
         console.error('Error processing message:', error);
     }
