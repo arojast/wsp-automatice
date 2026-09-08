@@ -140,3 +140,14 @@ export async function reactToMessage(
         },
     });
 }
+
+export async function sendWhatsAppMessage(
+    jid: string,
+    text: string,
+): Promise<void> {
+    if (!whatsappSocket) {
+        throw new Error('WhatsApp socket is not ready');
+    }
+
+    await whatsappSocket.sendMessage(jid, { text });
+}

@@ -1,6 +1,6 @@
 import { db } from '../client';
-import { eq, and } from "drizzle-orm";
-import { identifiers } from '../schema';
+import { eq, and, asc } from "drizzle-orm";
+import { batches, chats, identifiers, messages } from '../schema';
 
 export async function findIdentifier(
     value: string,
@@ -48,4 +48,22 @@ export async function createIdentifiers(data: {
     }
 
     return savedIdentifiers;
+}
+
+export async function findIdentifiersByBatchId(batchId: number) {
+    return db
+        .select({
+            identifier: identifiers.value,
+        })
+        .from(identifiers)
+        .innerJoin(chats, eq(identifiers.chatId, chats.id))
+        .innerJoin(messages, eq(identifiers.messageId, messages.id))
+        .where(
+            and(
+                eq(identifiers.batchId, batchId),
+                eq(messages.isDeleted, false),
+            ),
+        )
+        .orderBy(asc(chats.name))
+        .all();
 }

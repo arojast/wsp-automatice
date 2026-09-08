@@ -3,12 +3,20 @@ import { whatsappGroups } from './groups';
 import { findOrCreateChat } from '../database/repositories/chats';
 import { findOrCreateMessage } from '../database/repositories/messages';
 import { createIdentifiers } from '../database/repositories/identifiers';
+import { findIdentifiersByBatchId } from '../database/repositories/identifiers';
 import { findOrCreateCreatingBatch } from '../database/repositories/batches';
 import {
     createJob,
     findJobByTypeAndMessage,
 } from '../database/repositories/jobs';
-import type { IncomingWhatsAppMessage } from './client';
+import { markCreatingBatchAsSent } from '../database/repositories/batches';
+import { sendWhatsAppMessage, type IncomingWhatsAppMessage } from './client';
+
+const ADMIN_JID = process.env.ADMIN_WHATSAPP_JID;
+
+if (!ADMIN_JID) {
+    throw new Error('ADMIN_WHATSAPP_JID is not configured');
+}
 
 function randomReactionDelay(): number {
     const minimum = 45_000;
@@ -24,7 +32,49 @@ export async function handleIncomingMessage(message: IncomingWhatsAppMessage): P
         const chatId = message.from;
 
         if (!chatId.endsWith('@g.us')) {
-            console.log('Ignoring private chat');
+            if (chatId === ADMIN_JID) {
+                if(message.body.trim() === '1') {
+                    const sentBatch = await markCreatingBatchAsSent();
+
+                    if (!sentBatch) {
+                        await sendWhatsAppMessage(
+                            message.key.remoteJid ?? ADMIN_JID,
+                            'No hay un batch activo en estado CREATING.',
+                        );
+                        return;
+                    }
+
+                    await sendWhatsAppMessage(
+                        message.key.remoteJid ?? ADMIN_JID,
+                        [
+                            'Batch enviado:',
+                            `ID: ${sentBatch.id}`,
+                            `Numero: ${sentBatch.number}`,
+                            `Estado: ${sentBatch.status}`,
+                            `Sent at: ${sentBatch.sentAt?.toISOString() ?? 'N/A'}`,
+                        ].join('\n'),
+                    );
+
+                    const batchIdentifiers = await findIdentifiersByBatchId(
+                        sentBatch.id,
+                    );
+                    const identifiersMessage = batchIdentifiers.length > 0
+                        ? batchIdentifiers.map(({ identifier }) => identifier).join('\n')
+                        : 'No hay identificadores en este batch.';
+
+                    await sendWhatsAppMessage(
+                        message.key.remoteJid ?? ADMIN_JID,
+                        identifiersMessage,
+                    );
+
+                    console.log('Batch marked as SENT:', sentBatch.id);
+                }
+            }
+
+            if (chatId !== ADMIN_JID) {
+                console.log('Ignoring private chat');
+            }
+
             return;
         }
 

@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { startWhatsAppClient } from './whatsapp/client';
 import { handleIncomingMessage } from './whatsapp/message-handler';
 import { startQueueWorker } from './queue/worker';

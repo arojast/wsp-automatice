@@ -1,5 +1,5 @@
 import { db } from '../client';
-import { desc, eq } from 'drizzle-orm';
+import { desc, eq, and } from 'drizzle-orm';
 import { batches } from '../schema';
 
 export async function findLastCreatingBatch() {
@@ -42,4 +42,27 @@ export async function findOrCreateCreatingBatch() {
     }
 
     return createBatch();
+}
+
+export async function markCreatingBatchAsSent() {
+    const batch = await findLastCreatingBatch();
+
+    if (!batch) {
+        return null;
+    }
+
+    return db
+        .update(batches)
+        .set({
+            status: 'SENT',
+            sentAt: new Date(),
+        })
+        .where(
+            and(
+                eq(batches.id, batch.id),
+                eq(batches.status, 'CREATING'),
+            ),
+        )
+        .returning()
+        .get();
 }
