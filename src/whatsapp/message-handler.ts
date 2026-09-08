@@ -24,6 +24,7 @@ let awaitingZipBatchId = false;
 let awaitingScheduleBatchId = false;
 let zipBatchId: number | null = null;
 let scheduleZipJobs = true;
+let groupMessageProcessingEnabled = true;
 
 if (!configuredAdminJid) {
     throw new Error('ADMIN_WHATSAPP_JID is not configured');
@@ -98,6 +99,26 @@ async function handleAdminMessage(message: IncomingWhatsAppMessage): Promise<voi
         awaitingBatchId = false;
         awaitingZipBatchId = false;
         await sendWhatsAppMessage(replyTo, 'Ingrese el numero del batch');
+        return;
+    }
+
+    // Command -6: stop saving and processing incoming group messages.
+    if (command === '-6') {
+        groupMessageProcessingEnabled = false;
+        await sendWhatsAppMessage(
+            replyTo,
+            'El procesamiento de mensajes de grupos ha sido detenido.',
+        );
+        return;
+    }
+
+    // Command -7: resume saving and processing incoming group messages.
+    if (command === '-7') {
+        groupMessageProcessingEnabled = true;
+        await sendWhatsAppMessage(
+            replyTo,
+            'El procesamiento de mensajes de grupos ha sido reactivado.',
+        );
         return;
     }
 
@@ -192,6 +213,11 @@ export async function handleIncomingMessage(message: IncomingWhatsAppMessage): P
             } else {
                 console.log('Ignoring private chat');
             }
+            return;
+        }
+
+        if (!groupMessageProcessingEnabled) {
+            console.log('Group message processing is disabled');
             return;
         }
 
