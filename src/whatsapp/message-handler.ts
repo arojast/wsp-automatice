@@ -272,6 +272,12 @@ export async function handleIncomingMessage(message: IncomingWhatsAppMessage): P
             return;
         }
 
+        // Ignore messages sent by the bot itself and messages from groups if group message processing is disabled.
+        if (message.key.fromMe) {
+            console.log('Ignoring message sent by myself');
+            return;
+        }
+
         if (!groupMessageProcessingEnabled) {
             console.log('Group message processing is disabled');
             return;
