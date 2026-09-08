@@ -13,6 +13,7 @@ import { markCreatingBatchAsSent } from '../database/repositories/batches';
 import { sendWhatsAppMessage, type IncomingWhatsAppMessage } from './client';
 
 const ADMIN_JID = process.env.ADMIN_WHATSAPP_JID;
+let awaitingBatchId = false;
 
 if (!ADMIN_JID) {
     throw new Error('ADMIN_WHATSAPP_JID is not configured');
@@ -33,7 +34,11 @@ export async function handleIncomingMessage(message: IncomingWhatsAppMessage): P
 
         if (!chatId.endsWith('@g.us')) {
             if (chatId === ADMIN_JID) {
-                if(message.body.trim() === '1') {
+                const command = message.body.trim();
+
+                // Handle admin commands
+                // Command 1: Mark the current creating batch as sent and return its details
+                if (command === '1') {
                     const sentBatch = await markCreatingBatchAsSent();
 
                     if (!sentBatch) {
@@ -68,6 +73,60 @@ export async function handleIncomingMessage(message: IncomingWhatsAppMessage): P
                     );
 
                     console.log('Batch marked as SENT:', sentBatch.id);
+                }
+
+                // Command 2: Request the batch ID to query its identifiers
+                // and then return the identifiers for that batch with their corresponding group names
+                if (command === '2') {
+                    awaitingBatchId = true;
+                    await sendWhatsAppMessage(
+                        message.key.remoteJid ?? ADMIN_JID,
+                        'Ingrese el id del batch a consultar',
+                    );
+                    return;
+                }
+
+                if (awaitingBatchId) {
+                    if (!/^\d+$/.test(command)) {
+                        await sendWhatsAppMessage(
+                            message.key.remoteJid ?? ADMIN_JID,
+                            'El id del batch debe ser un numero entero.',
+                        );
+                        return;
+                    }
+
+                    awaitingBatchId = false;
+                    const batchId = Number(command);
+                    const batchIdentifiers = await findIdentifiersByBatchId(batchId);
+
+                    if (batchIdentifiers.length === 0) {
+                        await sendWhatsAppMessage(
+                            message.key.remoteJid ?? ADMIN_JID,
+                            `No hay identificadores para el batch ${batchId}.`,
+                        );
+                        return;
+                    }
+
+                    const groupedIdentifiers = new Map<string, string[]>();
+
+                    for (const item of batchIdentifiers) {
+                        const groupName = item.chatName ?? 'Sin nombre';
+                        const groupIdentifiers = groupedIdentifiers.get(groupName) ?? [];
+                        groupIdentifiers.push(item.identifier);
+                        groupedIdentifiers.set(groupName, groupIdentifiers);
+                    }
+
+                    const response = [...groupedIdentifiers.entries()]
+                        .map(([groupName, groupIdentifiers]) => (
+                            [groupName, ...groupIdentifiers].join('\n')
+                        ))
+                        .join('\n\n');
+
+                    await sendWhatsAppMessage(
+                        message.key.remoteJid ?? ADMIN_JID,
+                        response,
+                    );
+                    return;
                 }
             }
 

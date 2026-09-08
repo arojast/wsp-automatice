@@ -53,6 +53,7 @@ export async function createIdentifiers(data: {
 export async function findIdentifiersByBatchId(batchId: number) {
     return db
         .select({
+            chatName: chats.name,
             identifier: identifiers.value,
         })
         .from(identifiers)
