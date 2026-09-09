@@ -1,6 +1,6 @@
 import { db } from '../client';
-import { desc, eq, and } from 'drizzle-orm';
-import { batches } from '../schema';
+import { desc, eq, and, sql } from 'drizzle-orm';
+import { batches, identifiers } from '../schema';
 
 export async function findLastCreatingBatch() {
     return db
@@ -65,4 +65,17 @@ export async function markCreatingBatchAsSent() {
         )
         .returning()
         .get();
+}
+
+export async function countIdentifiersByBatch(
+    batchId: number,
+): Promise<number> {
+    const result = await db
+        .select({
+            count: sql<number>`count(*)`,
+        })
+        .from(identifiers)
+        .where(eq(identifiers.batchId, batchId));
+
+    return result[0]?.count ?? 0;
 }

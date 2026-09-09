@@ -6,7 +6,12 @@ import {
     createIdentifiers,
     findIdentifiersByBatchId,
 } from '../database/repositories/identifiers';
-import { findOrCreateCreatingBatch, markCreatingBatchAsSent } from '../database/repositories/batches';
+import { 
+    findOrCreateCreatingBatch, 
+    markCreatingBatchAsSent, 
+    findLastCreatingBatch, 
+    countIdentifiersByBatch 
+} from '../database/repositories/batches';
 import {
     createJob,
     findJobByTypeAndMessage,
@@ -60,6 +65,7 @@ async function handleAdminMessage(message: IncomingWhatsAppMessage): Promise<voi
                 '-6 Consultar estado de lectura',
                 '-7 Pausar lectura de mensajes de grupos',
                 '-8 Reactivar lectura de mensajes de grupos',
+                '-9 Mostrat el batch actual en estado CREATING y sus identificadores',
             ].join('\n'),
         );
         return;
@@ -152,6 +158,31 @@ async function handleAdminMessage(message: IncomingWhatsAppMessage): Promise<voi
         groupMessageProcessingEnabled = true;
         return;
     }
+
+    if (command === '-9') {
+        const batch = await findLastCreatingBatch();
+
+        if (!batch) {
+            await sendWhatsAppMessage(replyTo, 'No hay un batch activo en estado CREATING.');
+            return;
+        }
+
+        const identifierCount = await countIdentifiersByBatch(batch.id);
+
+        await sendWhatsAppMessage(
+            replyTo,
+            [
+                'Batch Actual:',
+                `ID: ${batch.id}`,
+                `Numero: ${batch.number}`,
+                `Estado: ${batch.status}`,
+                `Creado: ${batch.createdAt}`,
+                `Identifiers: ${identifierCount}`,
+            ].join('\n'),
+        );
+        return
+    }
+
 
     if (awaitingBatchId) {
         if (!/^\d+$/.test(command)) {
