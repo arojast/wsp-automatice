@@ -36,6 +36,62 @@
       "when": 1788468612598,
       "tag": "0004_careful_pixie",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1788494874315,
+      "tag": "0005_large_pyro",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1788539735545,
+      "tag": "0006_glamorous_blue_marvel",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1788544180527,
+      "tag": "0007_wandering_leader",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1788792652763,
+      "tag": "0008_breezy_domino",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1788814166366,
+      "tag": "0009_prevent_duplicate_jobs",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1788835704859,
+      "tag": "0010_queue_document_delivery",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1788836994997,
+      "tag": "0011_partial_reaction_job_unique",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1788838427092,
+      "tag": "0012_readable_datetime_columns",
+      "breakpoints": true
     }
   ]
 }
