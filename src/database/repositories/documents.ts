@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm';
-import { db } from '../client';
-import { chats, documents, identifiers } from '../schema';
+import { db } from '../client.js';
+import { chats, documents, identifiers } from '../schema/index.js';
 
 export async function createDocument(data: {
     identifierId: number;

@@ -1,6 +1,6 @@
-export { chats } from "./chats";
-export { messages } from "./messages";
-export { identifiers } from "./identifiers";
-export { batches } from "./batches";
-export { documents } from "./documents";
-export { jobs } from "./jobs";
+export { chats } from "./chats.js";
+export { messages } from "./messages.js";
+export { identifiers } from "./identifiers.js";
+export { batches } from "./batches.js";
+export { documents } from "./documents.js";
+export { jobs } from "./jobs.js";

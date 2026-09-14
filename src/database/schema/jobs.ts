@@ -1,8 +1,8 @@
 import { sql } from "drizzle-orm";
 import { integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
-import { messages } from "./messages";
-import { documents } from "./documents";
-import { datetime } from '../types';
+import { messages } from "./messages.js";
+import { documents } from "./documents.js";
+import { datetime } from '../types.js';
 
 export const jobStatuses = [
     "PENDING",

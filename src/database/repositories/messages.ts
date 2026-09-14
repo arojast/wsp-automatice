@@ -1,6 +1,6 @@
-import { db } from "../client";
+import { db } from "../client.js";
 import { eq } from "drizzle-orm";
-import { messages } from "../schema";
+import { messages } from "../schema/index.js";
 
 export async function findMessagesByWhatsappId(whatsappMessageId: string) {
     return db

@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
-import { db } from "../client";
-import { chats } from "../schema";
+import { db } from "../client.js";
+import { chats } from "../schema/index.js";
 
 export async function findChatByWhatsappId(whatsappChatId: string) {
     return db

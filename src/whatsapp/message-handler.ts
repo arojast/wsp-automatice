@@ -1,27 +1,27 @@
-import { detectIdentifiers } from '../identifiers/detector';
-import { whatsappGroups } from './groups';
-import { findOrCreateChat } from '../database/repositories/chats';
-import { findOrCreateMessage } from '../database/repositories/messages';
+import { detectIdentifiers } from '../identifiers/detector.js';
+import { whatsappGroups } from './groups.js';
+import { findOrCreateChat } from '../database/repositories/chats.js';
+import { findOrCreateMessage } from '../database/repositories/messages.js';
 import {
     createIdentifiers,
     findIdentifiersByBatchId,
-} from '../database/repositories/identifiers';
+} from '../database/repositories/identifiers.js';
 import { 
     findOrCreateCreatingBatch, 
     markCreatingBatchAsSent, 
     findLastCreatingBatch, 
     countIdentifiersByBatch 
-} from '../database/repositories/batches';
+} from '../database/repositories/batches.js';
 import {
     createJob,
     findJobByTypeAndMessage,
     scheduleDocumentJobsByBatch,
-} from '../database/repositories/jobs';
+} from '../database/repositories/jobs.js';
 import {
     sendWhatsAppMessage,
     type IncomingWhatsAppMessage,
-} from './client';
-import { saveZipDocuments } from '../documents/zip-processor';
+} from './client.js';
+import { saveZipDocuments } from '../documents/zip-processor.js';
 
 const configuredAdminJid = process.env.ADMIN_WHATSAPP_JID;
 let awaitingBatchId = false;

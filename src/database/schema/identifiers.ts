@@ -3,10 +3,10 @@ import {
     sqliteTable,
     text,
 } from "drizzle-orm/sqlite-core";
-import { chats } from "./chats";
-import { messages } from "./messages";
-import { batches } from "./batches";
-import { datetime } from '../types';
+import { chats } from "./chats.js";
+import { messages } from "./messages.js";
+import { batches } from "./batches.js";
+import { datetime } from '../types.js';
 
 export const identifiers = sqliteTable("identifiers", {
     id: integer("id").primaryKey({ autoIncrement: true }),

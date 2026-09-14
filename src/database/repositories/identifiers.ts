@@ -1,6 +1,6 @@
-import { db } from '../client';
+import { db } from '../client.js';
 import { eq, and, asc } from "drizzle-orm";
-import { batches, chats, identifiers, messages } from '../schema';
+import { batches, chats, identifiers, messages } from '../schema/index.js';
 
 export async function findIdentifier(
     value: string,

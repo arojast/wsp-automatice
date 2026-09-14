@@ -1,6 +1,6 @@
-import { db } from '../client';
+import { db } from '../client.js';
 import { desc, eq, and, sql } from 'drizzle-orm';
-import { batches, identifiers } from '../schema';
+import { batches, identifiers } from '../schema/index.js';
 
 export async function findLastCreatingBatch() {
     return db

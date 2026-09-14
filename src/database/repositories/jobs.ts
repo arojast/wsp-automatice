@@ -1,5 +1,5 @@
-import { db } from "../client";
-import { documents, identifiers, jobs } from "../schema";
+import { db } from "../client.js";
+import { documents, identifiers, jobs } from "../schema/index.js";
 import { and, eq, isNull } from "drizzle-orm";
 
 export async function createJob(data: {

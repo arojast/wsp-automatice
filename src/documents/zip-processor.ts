@@ -2,19 +2,19 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import unzipper from 'unzipper';
 
-import { findIdentifiersByBatchId } from '../database/repositories/identifiers';
+import { findIdentifiersByBatchId } from '../database/repositories/identifiers.js';
 import {
     createJob,
     findJobByTypeAndDocument,
-} from '../database/repositories/jobs';
+} from '../database/repositories/jobs.js';
 import {
     createDocument,
     findDocumentByIdentifierAndFilename,
-} from '../database/repositories/documents';
+} from '../database/repositories/documents.js';
 import {
     downloadIncomingDocument,
     type IncomingWhatsAppMessage,
-} from '../whatsapp/client';
+} from '../whatsapp/client.js';
 
 function normalizeIdentifier(value: string): string {
     return value.trim().toUpperCase();

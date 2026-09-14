@@ -1,18 +1,18 @@
 import { and, eq, lte } from 'drizzle-orm';
 import type { WAMessageKey } from '@whiskeysockets/baileys';
 
-import { db } from '../database/client';
-import { jobs } from '../database/schema';
-import { findMessageById } from '../database/repositories/messages';
+import { db } from '../database/client.js';
+import { jobs } from '../database/schema/index.js';
+import { findMessageById } from '../database/repositories/messages.js';
 import {
     findDocumentForSending,
     markDocumentAsError,
     markDocumentAsSent,
-} from '../database/repositories/documents';
+} from '../database/repositories/documents.js';
 import {
     reactToMessage,
     sendWhatsAppDocument,
-} from '../whatsapp/client';
+} from '../whatsapp/client.js';
 import { readFile } from 'node:fs/promises';
 
 const POLL_INTERVAL = 5_000;

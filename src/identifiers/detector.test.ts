@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { detectIdentifiers } from '../../src/identifiers/detector';
+import { detectIdentifiers } from '../../src/identifiers/detector.js';
 
 describe('detectIdentifiers', () => {
 

@@ -1,5 +1,5 @@
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
-import { datetime } from '../types';
+import { datetime } from '../types.js';
 
 export const batchStatuses = [
     "CREATING",

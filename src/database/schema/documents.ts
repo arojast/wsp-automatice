@@ -1,6 +1,6 @@
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
-import { identifiers } from "./identifiers";
-import { datetime } from '../types';
+import { identifiers } from "./identifiers.js";
+import { datetime } from '../types.js';
 
 export const documentStatuses = [
   "RECEIVED",

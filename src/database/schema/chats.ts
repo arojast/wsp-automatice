@@ -3,7 +3,7 @@ import {
     sqliteTable,
     text,
 } from "drizzle-orm/sqlite-core";
-import { datetime } from '../types';
+import { datetime } from '../types.js';
 
 export const chats = sqliteTable("chats", {
     id: integer("id").primaryKey({ autoIncrement: true }),
