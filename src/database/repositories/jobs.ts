@@ -83,3 +83,33 @@ export async function findJobByTypeAndMessage(
         )
         .get();
 }
+
+export async function scheduleReactionJobs(): Promise<number> {
+    const pendingJobs = await db
+        .select({
+            jobId: jobs.id,
+        })
+        .from(jobs)
+        .where(
+            and(
+                eq(jobs.type, 'REACT_MESSAGE'),
+                eq(jobs.status, 'PENDING'),
+                isNull(jobs.scheduledAt),
+            ),
+        )
+        .all();
+
+    let scheduledAt = Date.now();
+
+    for (const [index, job] of pendingJobs.entries()) {
+        scheduledAt += Math.floor(Math.random() * (20 - 5 + 1) + 5) * 1000;
+        await db
+            .update(jobs)
+            .set({
+                scheduledAt: new Date(scheduledAt),
+            })
+            .where(eq(jobs.id, job.jobId));
+    }
+
+    return pendingJobs.length;
+}

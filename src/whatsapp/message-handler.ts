@@ -16,6 +16,7 @@ import {
     createJob,
     findJobByTypeAndMessage,
     scheduleDocumentJobsByBatch,
+    scheduleReactionJobs,
 } from '../database/repositories/jobs.js';
 import {
     sendWhatsAppMessage,
@@ -29,7 +30,7 @@ let awaitingZipBatchId = false;
 let awaitingScheduleBatchId = false;
 let zipBatchId: number | null = null;
 let scheduleZipJobs = true;
-let groupMessageProcessingEnabled = true;
+let reactionSchedulingEnabled = true;
 
 if (!configuredAdminJid) {
     throw new Error('ADMIN_WHATSAPP_JID is not configured');
@@ -62,9 +63,9 @@ async function handleAdminMessage(message: IncomingWhatsAppMessage): Promise<voi
                 '-3 Cargar ZIP y programar envio de PDFs',
                 '-4 Cargar ZIP sin programar envio',
                 '-5 Programar envio de PDFs cargados',
-                '-6 Consultar estado de lectura',
-                '-7 Pausar lectura de mensajes de grupos',
-                '-8 Reactivar lectura de mensajes de grupos',
+                '-6 Consultar estado de reacciòn de mensajes',
+                '-7 Pausar reacciòn de mensajes de grupos',
+                '-8 Reactivar reacciòn de mensajes de grupos',
                 '-9 Mostrat el batch actual en estado CREATING y sus identificadores',
             ].join('\n'),
         );
@@ -132,30 +133,35 @@ async function handleAdminMessage(message: IncomingWhatsAppMessage): Promise<voi
     if (command === '-6') {
         await sendWhatsAppMessage(
             replyTo,
-            groupMessageProcessingEnabled
-                ? 'La lectura y el procesamiento de mensajes esta ACTIVO.'
-                : 'La lectura y el procesamiento de mensajes esta PAUSADO.',
+            reactionSchedulingEnabled
+                ? 'La lectura y reacciòn de mensajes esta ACTIVO.'
+                : 'La lectura y reacciòn de mensajes esta PAUSADO.',
         );
         return;
     }
 
     // Command -7: stop saving and processing incoming group messages.
     if (command === '-7') {
-        groupMessageProcessingEnabled = false;
+        reactionSchedulingEnabled = false;
         await sendWhatsAppMessage(
             replyTo,
-            'El procesamiento de mensajes de grupos ha sido detenido.',
+            'La reacciòn de mensajes de grupos ha sido detenido.',
         );
         return;
     }
 
     // Command -8: resume saving and processing incoming group messages.
     if (command === '-8') {
+        reactionSchedulingEnabled = true;
+        const scheduledJobs = await scheduleReactionJobs();
         await sendWhatsAppMessage(
             replyTo,
-            'El procesamiento de mensajes de grupos ha sido reactivado.',
+            [
+                'La reacciòn de mensajes de grupos ha sido reactivado.',
+                `Reacciones programadas: ${scheduledJobs}`,
+            ].join('\n'),
         );
-        groupMessageProcessingEnabled = true;
+        
         return;
     }
 
@@ -309,11 +315,6 @@ export async function handleIncomingMessage(message: IncomingWhatsAppMessage): P
             return;
         }
 
-        if (!groupMessageProcessingEnabled) {
-            console.log('Group message processing is disabled');
-            return;
-        }
-
         const groupName = whatsappGroups[chatId] ?? chatId;
         const identifiers = detectIdentifiers(message.body);
 
@@ -357,7 +358,9 @@ export async function handleIncomingMessage(message: IncomingWhatsAppMessage): P
             await createJob({
                 type: 'REACT_MESSAGE',
                 messageId: savedMessage.id,
-                scheduledAt: new Date(Date.now() + randomReactionDelay()),
+                //validate that the scheduledAt is set only if reactionSchedulingEnabled is true, otherwise it should be null
+                scheduledAt: reactionSchedulingEnabled
+                    ? new Date(Date.now() + randomReactionDelay()) : null,
             });
         }
     } catch (error) {
