@@ -4,7 +4,8 @@
     "start": "tsx src/app.ts",
     "build": "tsc",
     "start:prod": "node dist/app.js",
-    "test": "vitest"
+    "test": "vitest",
+    "cleanup": "tsx src/cleanup/cleanup.ts"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^9.6.0",
