@@ -4,3 +4,4 @@ export { identifiers } from "./identifiers.js";
 export { batches } from "./batches.js";
 export { documents } from "./documents.js";
 export { jobs } from "./jobs.js";
+export { configuration } from "./configuration.js";

@@ -5,7 +5,8 @@
     "build": "tsc",
     "start:prod": "node dist/app.js",
     "test": "vitest",
-    "cleanup": "tsx src/cleanup/cleanup.ts"
+    "cleanup": "tsx src/cleanup/cleanup.ts",
+    "db:seed:configuration": "tsx src/database/seeders/configuration.ts"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^9.6.0",
