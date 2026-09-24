@@ -66,6 +66,7 @@ function toIncomingMessage(message: WAMessage): IncomingWhatsAppMessage | null {
 
 export async function startWhatsAppClient(
     onMessage: (message: IncomingWhatsAppMessage) => Promise<void>,
+    onMessageDeleted: (key: WAMessageKey) => Promise<void>,
 ): Promise<void> {
     const {
         default: makeWASocket,
@@ -110,7 +111,7 @@ export async function startWhatsAppClient(
             ) {
                 preOpenReconnectAttempts += 1;
                 setTimeout(() => {
-                    void startWhatsAppClient(onMessage);
+                    void startWhatsAppClient(onMessage, onMessageDeleted);
                 }, 1_000);
             } else if (!connectionWasOpened) {
                 console.error(
@@ -133,6 +134,24 @@ export async function startWhatsAppClient(
             if (incomingMessage) {
                 await onMessage(incomingMessage);
             }
+        }
+    });
+
+    whatsappSocket.ev.on('messages.update', async (updates) => {
+        for (const update of updates) {
+            if (update.update.messageStubType !== 1) {
+                continue;
+            }
+
+            const deletedKey = update.key;
+
+            if (!deletedKey?.id) {
+                continue;
+            }
+
+            console.log('WhatsApp message deleted:', deletedKey);
+
+            await onMessageDeleted(deletedKey);
         }
     });
 }
