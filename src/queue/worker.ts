@@ -91,6 +91,13 @@ async function processJob(job: typeof jobs.$inferSelect): Promise<void> {
 
     try {
         if (job.type === 'REACT_MESSAGE') {
+            
+            if (!job.messageId) {
+                throw new Error(
+                    `REACT_MESSAGE job ${job.id} has no messageId`,
+                );
+            }
+
             const databaseMessage = await findMessageById(job.messageId);
 
             if (!databaseMessage) {
@@ -103,6 +110,12 @@ async function processJob(job: typeof jobs.$inferSelect): Promise<void> {
 
             await reactToMessage(messageKey, '👍');
         } else if (job.type === 'SEND_MISSING_IDENTIFIER') {
+            if (!job.messageId) {
+                throw new Error(
+                    `SEND_MISSING_IDENTIFIER job ${job.id} has no messageId`,
+                );
+            }
+
             const result = await findMessageWithChatById(job.messageId);
 
             if (!result) {
