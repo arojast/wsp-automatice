@@ -6,6 +6,7 @@ import { findIdentifiersByBatchId } from '../database/repositories/identifiers.j
 import {
     createJob,
     findJobByTypeAndDocument,
+    scheduleJobSequentially,
 } from '../database/repositories/jobs.js';
 import {
     createDocument,
@@ -36,6 +37,7 @@ export async function saveZipDocuments(
     saved: string[];
     unmatched: string[];
     missingIdentifiers: Array<{
+        messageId: number;
         chatName: string | null;
         identifier: string;
     }>;
@@ -78,6 +80,10 @@ export async function saveZipDocuments(
     const outputDirectory = join('data', 'documents', `batch-${batchId}`);
     await mkdir(outputDirectory, { recursive: true });
 
+    const unmatchedDirectory = join('data', 'unmatched', `batch-${batchId}`);
+    await mkdir(unmatchedDirectory, { recursive: true });
+
+
     const saved: string[] = [];
     const unmatched: string[] = [];
     const matchedIdentifierIds = new Set<number>();
@@ -117,7 +123,15 @@ export async function saveZipDocuments(
         }
 
         if (!identifier || matchedIdentifierIds.has(identifier.identifierId)) {
+            const filePath = join(unmatchedDirectory, filename);
+
+            await writeFile(
+                filePath,
+                await entry.buffer(),
+            );
+
             unmatched.push(filename);
+
             continue;
         }
 
@@ -131,10 +145,8 @@ export async function saveZipDocuments(
                 await enqueueDocumentJob(
                     existingDocument.id,
                     identifier.messageId,
-                    documentQueueOffset,
                     scheduleJobs,
                 );
-                documentQueueOffset += 1_000;
             }
             matchedIdentifierIds.add(identifier.identifierId);
             saved.push(filename);
@@ -151,10 +163,8 @@ export async function saveZipDocuments(
         await enqueueDocumentJob(
             savedDocument.id,
             identifier.messageId,
-            documentQueueOffset,
             scheduleJobs,
         );
-        documentQueueOffset += 1_000;
         matchedIdentifierIds.add(identifier.identifierId);
         saved.push(filename);
     }
@@ -162,6 +172,7 @@ export async function saveZipDocuments(
     const missingIdentifiers = batchIdentifiers
         .filter((item) => !matchedIdentifierIds.has(item.identifierId))
         .map((item) => ({
+            messageId: item.messageId,
             chatName: item.chatName,
             identifier: item.identifier,
         }));
@@ -172,7 +183,6 @@ export async function saveZipDocuments(
 async function enqueueDocumentJob(
     documentId: number,
     messageId: number,
-    delay: number,
     scheduleJob: boolean,
 ): Promise<void> {
     const existingJob = await findJobByTypeAndDocument(
@@ -180,14 +190,18 @@ async function enqueueDocumentJob(
         documentId,
     );
 
-    if (!existingJob) {
-        await createJob({
-            type: 'SEND_DOCUMENT',
-            messageId,
-            documentId,
-            scheduledAt: scheduleJob
-                ? new Date(Date.now() + delay)
-                : null,
-        });
+    if (existingJob) {
+        return;
+    }
+
+    const job = await createJob({
+        type: 'SEND_DOCUMENT',
+        messageId,
+        documentId,
+        scheduledAt: null,
+    });
+
+    if (scheduleJob) {
+        await scheduleJobSequentially(job.id);
     }
 }

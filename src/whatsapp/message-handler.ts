@@ -16,6 +16,7 @@ import {
     createJob,
     findJobByTypeAndMessage,
     scheduleDocumentJobsByBatch,
+    scheduleJobSequentially,
     scheduleReactionJobs,
 } from '../database/repositories/jobs.js';
 import {
@@ -25,12 +26,25 @@ import {
 import { saveZipDocuments } from '../documents/zip-processor.js';
 
 const configuredAdminJid = process.env.ADMIN_WHATSAPP_JID;
+let reactionSchedulingEnabled = true;
+
 let awaitingBatchId = false;
 let awaitingZipBatchId = false;
 let awaitingScheduleBatchId = false;
+let awaitingZipAction = false;
+
 let zipBatchId: number | null = null;
 let scheduleZipJobs = true;
-let reactionSchedulingEnabled = true;
+
+let pendingZipResult: {
+    missingIdentifiers: Array<{
+        messageId: number;
+        chatName: string | null;
+        identifier: string;
+    }>;
+    unmatched: string[];
+    batchId: number;
+} | null = null;
 
 if (!configuredAdminJid) {
     throw new Error('ADMIN_WHATSAPP_JID is not configured');
@@ -109,14 +123,101 @@ async function handleAdminMessage(message: IncomingWhatsAppMessage): Promise<voi
         return;
     }
 
+    if (awaitingZipAction) {
+        if (!['0', '1', '2', '3'].includes(command)) {
+            await sendWhatsAppMessage(
+                replyTo,
+                [
+                    'Opcion invalida.',
+                    '',
+                    '0 = No realizar ninguna accion',
+                    '1 = Enviar documentos no asociados y notificar identificadores sin documento',
+                    '2 = Enviar documentos no asociados',
+                    '3 = Notificar identificadores sin documento',
+                ].join('\n'),
+            );
+
+            return;
+        }
+
+        awaitingZipAction = false;
+
+        if (!pendingZipResult) {
+            await sendWhatsAppMessage(
+                replyTo,
+                'No hay resultados pendientes del ZIP.',
+            );
+
+            return;
+        }
+
+        const result = pendingZipResult;
+        pendingZipResult = null;
+
+        switch (command) {
+            case '0':
+                await sendWhatsAppMessage(
+                    replyTo,
+                    'No se realizara ninguna accion.',
+                );
+                return;
+
+            case '1':
+                // Send unmatched documents.
+                // Then schedule missing identifier notifications.
+                await sendUnmatchedDocuments(result);
+
+                await scheduleMissingIdentifierNotifications(
+                    result.missingIdentifiers,
+                );
+
+                await sendWhatsAppMessage(
+                    replyTo,
+                    'Documentos no asociados y notificaciones de identificadores sin documento programados.',
+                );
+
+                return;
+
+            case '2':
+                await sendUnmatchedDocuments(result);
+
+                await sendWhatsAppMessage(
+                    replyTo,
+                    'Documentos no asociados programados para envio.',
+                );
+
+                return;
+
+            case '3':
+                await scheduleMissingIdentifierNotifications(
+                    result.missingIdentifiers,
+                );
+
+                await sendWhatsAppMessage(
+                    replyTo,
+                    'Notificaciones de identificadores sin documento programadas.',
+                );
+
+                return;
+        }
+    }
+
     // Command -3: upload a ZIP and schedule its document jobs immediately.
     // Command -4: upload a ZIP and leave its document jobs without a date.
     if (command === '-3' || command === '-4') {
+        
         awaitingZipBatchId = true;
         awaitingBatchId = false;
         awaitingScheduleBatchId = false;
+        awaitingZipAction = false;
+
         scheduleZipJobs = command === '-3';
-        await sendWhatsAppMessage(replyTo, 'Ingrese el numero del batch');
+
+        await sendWhatsAppMessage(
+            replyTo,
+            'Ingrese el numero del batch',
+        );
+
         return;
     }
 
@@ -252,7 +353,18 @@ async function handleAdminMessage(message: IncomingWhatsAppMessage): Promise<voi
 
     if (zipBatchId !== null && !command) {
         try {
-            const result = await saveZipDocuments(message, zipBatchId, scheduleZipJobs);
+            const result = await saveZipDocuments(
+                message,
+                zipBatchId,
+                scheduleZipJobs,
+            );
+
+            pendingZipResult = {
+                missingIdentifiers: result.missingIdentifiers,
+                unmatched: result.unmatched,
+                batchId: zipBatchId,
+            };
+
             await sendWhatsAppMessage(
                 replyTo,
                 [
@@ -266,13 +378,76 @@ async function handleAdminMessage(message: IncomingWhatsAppMessage): Promise<voi
                     result.missingIdentifiers.length > 0
                         ? formatMissingIdentifiers(result.missingIdentifiers)
                         : 'Ninguno',
+                    '',
                 ].join('\n'),
             );
+
+            await sendWhatsAppMessage(
+                replyTo,
+                [
+                    '¿Qué deseas hacer?',
+                    '0 = No realizar ninguna accion',
+                    '1 = Enviar documentos no asociados y notificar identificadores sin documento',
+                    '2 = Enviar documentos no asociados',
+                    '3 = Notificar identificadores sin documento',
+                ].join('\n'),
+            );
+
+            awaitingZipAction = true;
+
         } catch (error) {
             await sendWhatsAppMessage(replyTo, `No se pudo procesar el ZIP: ${String(error)}`);
         } finally {
             zipBatchId = null;
         }
+    }
+}
+
+async function sendUnmatchedDocuments(
+    result: {
+        unmatched: string[];
+        batchId: number;
+    },
+): Promise<void> {
+    const unmatchedDirectory = `./data/unmatched/batch-${result.batchId}`;
+
+    for (const filename of result.unmatched) {
+        const filePath = `${unmatchedDirectory}/${filename}`;
+
+        const job = await createJob({
+            type: 'SEND_UNMATCHED_DOCUMENT',
+            filePath,
+            scheduledAt: null,
+        });
+
+        await scheduleJobSequentially(job.id);
+    }
+}
+
+async function scheduleMissingIdentifierNotifications(
+    missingIdentifiers: Array<{
+        messageId: number;
+        chatName: string | null;
+        identifier: string;
+    }>,
+): Promise<void> {
+    for (const item of missingIdentifiers) {
+        const existingJob = await findJobByTypeAndMessage(
+            'SEND_MISSING_IDENTIFIER',
+            item.messageId,
+        );
+
+        if (existingJob) {
+            continue;
+        }
+
+        const job = await createJob({
+            type: 'SEND_MISSING_IDENTIFIER',
+            messageId: item.messageId,
+            scheduledAt: null,
+        });
+
+        await scheduleJobSequentially(job.id);
     }
 }
 
@@ -301,6 +476,7 @@ export async function handleIncomingMessage(message: IncomingWhatsAppMessage): P
         const chatId = message.from;
 
         if (!chatId.endsWith('@g.us')) {
+            console.log(chatId,'chatID');
             if (chatId === ADMIN_JID) {
                 await handleAdminMessage(message);
             } else {

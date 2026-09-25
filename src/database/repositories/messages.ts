@@ -1,6 +1,6 @@
 import { db } from "../client.js";
 import { eq } from "drizzle-orm";
-import { messages, identifiers, jobs } from "../schema/index.js";
+import { messages, identifiers, jobs, chats } from "../schema/index.js";
 
 export async function findMessagesByWhatsappId(whatsappMessageId: string) {
     return db
@@ -95,6 +95,18 @@ export async function findMessageById(id: number) {
     return db
         .select()
         .from(messages)
+        .where(eq(messages.id, id))
+        .get();
+}
+
+export async function findMessageWithChatById(id: number) {
+    return db
+        .select({
+            message: messages,
+            chat: chats,
+        })
+        .from(messages)
+        .innerJoin(chats, eq(messages.chatId, chats.id))
         .where(eq(messages.id, id))
         .get();
 }

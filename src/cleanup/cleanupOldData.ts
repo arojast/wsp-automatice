@@ -13,7 +13,7 @@ import { documents } from "../database/schema/documents.js";
 import { jobs } from "../database/schema/jobs.js";
 import { messages } from "../database/schema/messages.js";
 
-import { rmdir, unlink } from "node:fs/promises";
+import { rm, rmdir, unlink } from "node:fs/promises";
 
 const CLEANUP_AFTER_HOURS = 72;
 
@@ -411,33 +411,29 @@ async function deleteBatchDirectories(
     }>,
 ): Promise<boolean> {
     for (const batch of batchesToDelete) {
-        const directoryPath =
-            `data/documents/batch-${batch.id}`;
+        const directories = [
+            `data/documents/batch-${batch.id}`,
+            `data/unmatched/batch-${batch.id}`,
+        ];
 
-        try {
-            await rmdir(directoryPath);
+        for (const directoryPath of directories) {
+            try {
+                await rm(directoryPath, {
+                    recursive: true,
+                    force: true,
+                });
 
-            console.log(
-                `Deleted batch directory: ${directoryPath}`,
-            );
-        } catch (error) {
-            if (
-                error instanceof Error &&
-                "code" in error &&
-                error.code === "ENOENT"
-            ) {
                 console.log(
-                    `Batch directory already missing: ${directoryPath}`,
+                    `Deleted batch directory: ${directoryPath}`,
                 );
-                continue;
+            } catch (error) {
+                console.error(
+                    `Failed to delete batch directory: ${directoryPath}`,
+                    error,
+                );
+
+                return false;
             }
-
-            console.error(
-                `Failed to delete batch directory: ${directoryPath}`,
-                error,
-            );
-
-            return false;
         }
     }
 

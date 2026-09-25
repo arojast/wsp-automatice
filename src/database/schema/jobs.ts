@@ -1,8 +1,8 @@
-import { sql } from "drizzle-orm";
-import { integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+
 import { messages } from "./messages.js";
 import { documents } from "./documents.js";
-import { datetime } from '../types.js';
+import { datetime } from "../types.js";
 
 export const jobStatuses = [
     "PENDING",
@@ -19,11 +19,14 @@ export const jobs = sqliteTable("jobs", {
     type: text("type").notNull(),
 
     messageId: integer("message_id")
-        .notNull()
         .references(() => messages.id),
 
     documentId: integer("document_id")
         .references(() => documents.id),
+
+    filePath: text("file_path"),
+
+    scheduledAt: datetime("scheduled_at"),
 
     status: text("status", {
         enum: jobStatuses,
@@ -31,23 +34,15 @@ export const jobs = sqliteTable("jobs", {
         .notNull()
         .default("PENDING"),
 
-    scheduledAt: datetime("scheduled_at"),
-
     attempts: integer("attempts")
         .notNull()
         .default(0),
 
-    createdAt: datetime("created_at")
-        .notNull()
-        .$defaultFn(() => new Date()),
+    error: text("error"),
 
     processedAt: datetime("processed_at"),
 
-    error: text("error"),
-}, (table) => ({
-    typeMessageUnique: uniqueIndex("jobs_type_message_unique")
-        .on(table.type, table.messageId)
-        .where(sql`type = 'REACT_MESSAGE'`),
-    typeDocumentUnique: uniqueIndex("jobs_type_document_unique")
-        .on(table.type, table.documentId),
-}));
+    createdAt: datetime("created_at")
+        .notNull()
+        .$defaultFn(() => new Date()),
+});

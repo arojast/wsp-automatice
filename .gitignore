@@ -10,4 +10,5 @@ data/baileys-auth/
 data/*.sqlite
 data/*.db
 data/documents/*
+data/unmatched/*
 drizzle/meta/
