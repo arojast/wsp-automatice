@@ -10,6 +10,7 @@ import { and, eq, isNull } from "drizzle-orm";
 export async function createJob(data: {
     type: string;
     messageId?: number;
+    identifierId?: number;
     documentId?: number;
     filePath?: string;
     scheduledAt: Date | null;
@@ -19,6 +20,7 @@ export async function createJob(data: {
         .values({
             type: data.type,
             messageId: data.messageId,
+            identifierId: data.identifierId,
             documentId: data.documentId,
             filePath: data.filePath,
             scheduledAt: data.scheduledAt,
@@ -168,4 +170,20 @@ export async function scheduleReactionJobs(): Promise<number> {
     }
 
     return pendingJobs.length;
+}
+
+export async function findJobByTypeAndIdentifier(
+    type: string,
+    identifierId: number,
+) {
+    return db
+        .select()
+        .from(jobs)
+        .where(
+            and(
+                eq(jobs.type, type),
+                eq(jobs.identifierId, identifierId),
+            ),
+        )
+        .get();
 }

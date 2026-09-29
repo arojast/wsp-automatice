@@ -1,6 +1,7 @@
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 import { messages } from "./messages.js";
+import { identifiers } from "./identifiers.js";
 import { documents } from "./documents.js";
 import { datetime } from "../types.js";
 
@@ -20,6 +21,8 @@ export const jobs = sqliteTable("jobs", {
 
     messageId: integer("message_id")
         .references(() => messages.id),
+    identifierId: integer("identifier_id")
+        .references(() => identifiers.id),
 
     documentId: integer("document_id")
         .references(() => documents.id),

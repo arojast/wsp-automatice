@@ -1,0 +1,1 @@
+ALTER TABLE `jobs` ADD `identifier_id` integer REFERENCES identifiers(id);

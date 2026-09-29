@@ -37,6 +37,7 @@ export async function saveZipDocuments(
     saved: string[];
     unmatched: string[];
     missingIdentifiers: Array<{
+        identifierId: number;
         messageId: number;
         chatName: string | null;
         identifier: string;
@@ -49,18 +50,30 @@ export async function saveZipDocuments(
     }
 
     const batchIdentifiers = await findIdentifiersByBatchId(batchId);
+
     const identifiersByValue = new Map(
-        batchIdentifiers.map((item) => [normalizeIdentifier(item.identifier), item]),
+        batchIdentifiers.map((item) => [
+            normalizeIdentifier(item.identifier),
+            item,
+        ]),
     );
-    const identifiersByPrefix = new Map<string, typeof batchIdentifiers[number]>();
+
+    const identifiersByPrefix = new Map<
+        string,
+        typeof batchIdentifiers[number]
+    >();
+
     const ambiguousPrefixes = new Set<string>();
+
     const identifiersByBirthDate = new Map<
         string,
         typeof batchIdentifiers[number][]
     >();
 
     for (const item of batchIdentifiers) {
-        const prefix = normalizeIdentifier(item.identifier).slice(0, 10);
+        const prefix = normalizeIdentifier(
+            item.identifier,
+        ).slice(0, 10);
 
         if (identifiersByPrefix.has(prefix)) {
             ambiguousPrefixes.add(prefix);
@@ -71,59 +84,127 @@ export async function saveZipDocuments(
         const birthDate = birthDatePart(item.identifier);
 
         if (birthDate) {
-            const candidates = identifiersByBirthDate.get(birthDate) ?? [];
+            const candidates =
+                identifiersByBirthDate.get(birthDate) ?? [];
+
             candidates.push(item);
-            identifiersByBirthDate.set(birthDate, candidates);
+
+            identifiersByBirthDate.set(
+                birthDate,
+                candidates,
+            );
         }
     }
 
-    const outputDirectory = join('data', 'documents', `batch-${batchId}`);
-    await mkdir(outputDirectory, { recursive: true });
+    const outputDirectory = join(
+        'data',
+        'documents',
+        `batch-${batchId}`,
+    );
 
-    const unmatchedDirectory = join('data', 'unmatched', `batch-${batchId}`);
-    await mkdir(unmatchedDirectory, { recursive: true });
+    await mkdir(outputDirectory, {
+        recursive: true,
+    });
 
+    const unmatchedDirectory = join(
+        'data',
+        'unmatched',
+        `batch-${batchId}`,
+    );
+
+    await mkdir(unmatchedDirectory, {
+        recursive: true,
+    });
 
     const saved: string[] = [];
     const unmatched: string[] = [];
+
     const matchedIdentifierIds = new Set<number>();
-    let documentQueueOffset = 0;
-    const archive = await unzipper.Open.buffer(document.data);
+
+    const archive = await unzipper.Open.buffer(
+        document.data,
+    );
+
     const pdfEntries = archive.files.filter((entry) => {
         const filename = basename(entry.path);
-        return entry.type === 'File' && /^csf_.+\.pdf$/i.test(filename);
+
+        return (
+            entry.type === 'File' &&
+            /^csf_.+\.pdf$/i.test(filename)
+        );
     });
 
     for (const entry of pdfEntries) {
         const filename = basename(entry.path);
-        const match = filename.match(/^csf_(.+)\.pdf$/i);
-        const normalizedIdentifier = normalizeIdentifier(match?.[1] ?? '');
-        const prefix = normalizedIdentifier.slice(0, 10);
-        let identifier = identifiersByValue.get(normalizedIdentifier) ??
-            (!ambiguousPrefixes.has(prefix)
-                ? identifiersByPrefix.get(prefix)
-                : undefined);
+
+        const match = filename.match(
+            /^csf_(.+)\.pdf$/i,
+        );
+
+        const normalizedIdentifier =
+            normalizeIdentifier(
+                match?.[1] ?? '',
+            );
+
+        const prefix =
+            normalizedIdentifier.slice(0, 10);
+
+        let identifier =
+            identifiersByValue.get(
+                normalizedIdentifier,
+            ) ??
+            (
+                !ambiguousPrefixes.has(prefix)
+                    ? identifiersByPrefix.get(prefix)
+                    : undefined
+            );
 
         if (!identifier) {
-            const birthDate = birthDatePart(normalizedIdentifier);
+            const birthDate =
+                birthDatePart(normalizedIdentifier);
+
             const zipCandidates = birthDate
                 ? pdfEntries.filter((candidate) => {
-                    const candidateName = basename(candidate.path);
-                    const candidateMatch = candidateName.match(/^csf_(.+)\.pdf$/i);
-                    return birthDatePart(candidateMatch?.[1] ?? '') === birthDate;
+                    const candidateName =
+                        basename(candidate.path);
+
+                    const candidateMatch =
+                        candidateName.match(
+                            /^csf_(.+)\.pdf$/i,
+                        );
+
+                    return (
+                        birthDatePart(
+                            candidateMatch?.[1] ?? '',
+                        ) === birthDate
+                    );
                 })
                 : [];
+
             const batchCandidates = birthDate
-                ? identifiersByBirthDate.get(birthDate) ?? []
+                ? identifiersByBirthDate.get(
+                    birthDate,
+                ) ?? []
                 : [];
 
-            if (zipCandidates.length === 1 && batchCandidates.length === 1) {
+            if (
+                zipCandidates.length === 1 &&
+                batchCandidates.length === 1
+            ) {
                 identifier = batchCandidates[0];
             }
         }
 
-        if (!identifier || matchedIdentifierIds.has(identifier.identifierId)) {
-            const filePath = join(unmatchedDirectory, filename);
+        if (
+            !identifier ||
+            matchedIdentifierIds.has(
+                identifier.identifierId,
+            )
+        ) {
+            const filePath = join(
+                unmatchedDirectory,
+                filename,
+            );
 
             await writeFile(
                 filePath,
@@ -135,10 +216,11 @@ export async function saveZipDocuments(
             continue;
         }
 
-        const existingDocument = await findDocumentByIdentifierAndFilename(
-            identifier.identifierId,
-            filename,
-        );
+        const existingDocument =
+            await findDocumentByIdentifierAndFilename(
+                identifier.identifierId,
+                filename,
+            );
 
         if (existingDocument) {
             if (existingDocument.status !== 'SENT') {
@@ -148,36 +230,64 @@ export async function saveZipDocuments(
                     scheduleJobs,
                 );
             }
-            matchedIdentifierIds.add(identifier.identifierId);
+
+            matchedIdentifierIds.add(
+                identifier.identifierId,
+            );
+
             saved.push(filename);
+
             continue;
         }
 
-        const filePath = join(outputDirectory, filename);
-        await writeFile(filePath, await entry.buffer());
+        const filePath = join(
+            outputDirectory,
+            filename,
+        );
+
+        await writeFile(
+            filePath,
+            await entry.buffer(),
+        );
+
         const savedDocument = await createDocument({
             identifierId: identifier.identifierId,
             filename,
             filePath,
         });
+
         await enqueueDocumentJob(
             savedDocument.id,
             identifier.messageId,
             scheduleJobs,
         );
-        matchedIdentifierIds.add(identifier.identifierId);
+
+        matchedIdentifierIds.add(
+            identifier.identifierId,
+        );
+
         saved.push(filename);
     }
 
     const missingIdentifiers = batchIdentifiers
-        .filter((item) => !matchedIdentifierIds.has(item.identifierId))
+        .filter(
+            (item) =>
+                !matchedIdentifierIds.has(
+                    item.identifierId,
+                ),
+        )
         .map((item) => ({
+            identifierId: item.identifierId,
             messageId: item.messageId,
             chatName: item.chatName,
             identifier: item.identifier,
         }));
 
-    return { saved, unmatched, missingIdentifiers };
+    return {
+        saved,
+        unmatched,
+        missingIdentifiers,
+    };
 }
 
 async function enqueueDocumentJob(
@@ -185,10 +295,11 @@ async function enqueueDocumentJob(
     messageId: number,
     scheduleJob: boolean,
 ): Promise<void> {
-    const existingJob = await findJobByTypeAndDocument(
-        'SEND_DOCUMENT',
-        documentId,
-    );
+    const existingJob =
+        await findJobByTypeAndDocument(
+            'SEND_DOCUMENT',
+            documentId,
+        );
 
     if (existingJob) {
         return;

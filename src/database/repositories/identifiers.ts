@@ -5,6 +5,8 @@ import { batches, chats, identifiers, messages } from '../schema/index.js';
 export async function findIdentifier(
     value: string,
     type: string,
+    chatId: number,
+    batchId: number,
 ) {
     return db
         .select()
@@ -13,6 +15,8 @@ export async function findIdentifier(
             and(
                 eq(identifiers.value, value),
                 eq(identifiers.type, type),
+                eq(identifiers.chatId, chatId),
+                eq(identifiers.batchId, batchId),
             ),
         )
         .get();
@@ -32,6 +36,8 @@ export async function createIdentifiers(data: {
         const existing = await findIdentifier(
             identifier.value,
             identifier.type,
+            identifier.chatId,
+            identifier.batchId,
         );
 
         if (existing) {
@@ -71,4 +77,12 @@ export async function findIdentifiersByBatchId(batchId: number) {
         )
         .orderBy(asc(chats.name))
         .all();
+}
+
+export async function findIdentifierById(identifierId: number) {
+    return db
+        .select()
+        .from(identifiers)
+        .where(eq(identifiers.id, identifierId))
+        .get();
 }

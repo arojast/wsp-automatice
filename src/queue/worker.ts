@@ -9,6 +9,7 @@ import {
     markDocumentAsError,
     markDocumentAsSent,
 } from '../database/repositories/documents.js';
+import { findIdentifierById } from '../database/repositories/identifiers.js';
 import {
     reactToMessage,
     sendWhatsAppDocument,
@@ -116,6 +117,12 @@ async function processJob(job: typeof jobs.$inferSelect): Promise<void> {
                 );
             }
 
+            if (!job.identifierId) {
+                throw new Error(
+                    `SEND_MISSING_IDENTIFIER job ${job.id} has no identifierId`,
+                );
+            }
+
             const result = await findMessageWithChatById(job.messageId);
 
             if (!result) {
@@ -124,27 +131,20 @@ async function processJob(job: typeof jobs.$inferSelect): Promise<void> {
                 );
             }
 
-            const { message, chat } = result;
+            const { chat } = result;
 
-            const messageIdentifiers = await db
-                .select()
-                .from(identifiers)
-                .where(eq(identifiers.messageId, message.id))
-                .all();
+            const identifier = await findIdentifierById(job.identifierId);
 
-            if (messageIdentifiers.length === 0) {
+            if (!identifier) {
                 throw new Error(
-                    `No identifiers found for message ${job.messageId}`,
+                    `Identifier ${job.identifierId} not found`,
                 );
             }
 
-            for (const item of messageIdentifiers) {
-                await sendWhatsAppMessage(
-                    chat.whatsappChatId,
-                    `❌ ${item.value}`,
-                );
-            }
-            
+            await sendWhatsAppMessage(
+                chat.whatsappChatId,
+                `❌ ${identifier.value}`,
+            );    
         } else if (job.type === 'SEND_UNMATCHED_DOCUMENT') {
             if (!job.filePath) {
                 throw new Error(

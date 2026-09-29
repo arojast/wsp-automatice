@@ -113,6 +113,13 @@
       "when": 1790377020741,
       "tag": "0015_open_shadow_king",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "6",
+      "when": 1790716017315,
+      "tag": "0016_graceful_inertia",
+      "breakpoints": true
     }
   ]
 }

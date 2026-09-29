@@ -6,15 +6,16 @@ import {
     createIdentifiers,
     findIdentifiersByBatchId,
 } from '../database/repositories/identifiers.js';
-import { 
-    findOrCreateCreatingBatch, 
-    markCreatingBatchAsSent, 
-    findLastCreatingBatch, 
-    countIdentifiersByBatch 
+import {
+    findOrCreateCreatingBatch,
+    markCreatingBatchAsSent,
+    findLastCreatingBatch,
+    countIdentifiersByBatch,
 } from '../database/repositories/batches.js';
 import {
     createJob,
     findJobByTypeAndMessage,
+    findJobByTypeAndIdentifier,
     scheduleDocumentJobsByBatch,
     scheduleJobSequentially,
     scheduleReactionJobs,
@@ -26,6 +27,7 @@ import {
 import { saveZipDocuments } from '../documents/zip-processor.js';
 
 const configuredAdminJid = process.env.ADMIN_WHATSAPP_JID;
+
 let reactionSchedulingEnabled = true;
 
 let awaitingBatchId = false;
@@ -38,6 +40,7 @@ let scheduleZipJobs = true;
 
 let pendingZipResult: {
     missingIdentifiers: Array<{
+        identifierId: number;
         messageId: number;
         chatName: string | null;
         identifier: string;
@@ -61,7 +64,9 @@ function randomReactionDelay(): number {
     );
 }
 
-async function handleAdminMessage(message: IncomingWhatsAppMessage): Promise<void> {
+async function handleAdminMessage(
+    message: IncomingWhatsAppMessage,
+): Promise<void> {
     const command = message.body.trim();
     const replyTo = message.key.remoteJid ?? ADMIN_JID;
 
@@ -83,6 +88,7 @@ async function handleAdminMessage(message: IncomingWhatsAppMessage): Promise<voi
                 '-9 Mostrat el batch actual en estado CREATING y sus identificadores',
             ].join('\n'),
         );
+
         return;
     }
 
@@ -91,7 +97,11 @@ async function handleAdminMessage(message: IncomingWhatsAppMessage): Promise<voi
         const sentBatch = await markCreatingBatchAsSent();
 
         if (!sentBatch) {
-            await sendWhatsAppMessage(replyTo, 'No hay un batch activo en estado CREATING.');
+            await sendWhatsAppMessage(
+                replyTo,
+                'No hay un batch activo en estado CREATING.',
+            );
+
             return;
         }
 
@@ -107,22 +117,32 @@ async function handleAdminMessage(message: IncomingWhatsAppMessage): Promise<voi
         );
 
         const batchIdentifiers = await findIdentifiersByBatchId(sentBatch.id);
+
         await sendWhatsAppMessage(
             replyTo,
             batchIdentifiers.length > 0
-                ? batchIdentifiers.map(({ identifier }) => identifier).join('\n')
+                ? batchIdentifiers
+                    .map(({ identifier }) => identifier)
+                    .join('\n')
                 : 'No hay identificadores en este batch.',
         );
+
         return;
     }
 
     // Command -2: request a batch ID and return its identifiers grouped by chat.
     if (command === '-2') {
         awaitingBatchId = true;
-        await sendWhatsAppMessage(replyTo, 'Ingrese el id del batch a consultar');
+
+        await sendWhatsAppMessage(
+            replyTo,
+            'Ingrese el id del batch a consultar',
+        );
+
         return;
     }
 
+    // Handle the action selected after processing a ZIP.
     if (awaitingZipAction) {
         if (!['0', '1', '2', '3'].includes(command)) {
             await sendWhatsAppMessage(
@@ -160,6 +180,7 @@ async function handleAdminMessage(message: IncomingWhatsAppMessage): Promise<voi
                     replyTo,
                     'No se realizara ninguna accion.',
                 );
+
                 return;
 
             case '1':
@@ -205,7 +226,6 @@ async function handleAdminMessage(message: IncomingWhatsAppMessage): Promise<voi
     // Command -3: upload a ZIP and schedule its document jobs immediately.
     // Command -4: upload a ZIP and leave its document jobs without a date.
     if (command === '-3' || command === '-4') {
-        
         awaitingZipBatchId = true;
         awaitingBatchId = false;
         awaitingScheduleBatchId = false;
@@ -226,7 +246,12 @@ async function handleAdminMessage(message: IncomingWhatsAppMessage): Promise<voi
         awaitingScheduleBatchId = true;
         awaitingBatchId = false;
         awaitingZipBatchId = false;
-        await sendWhatsAppMessage(replyTo, 'Ingrese el numero del batch');
+
+        await sendWhatsAppMessage(
+            replyTo,
+            'Ingrese el numero del batch',
+        );
+
         return;
     }
 
@@ -238,23 +263,28 @@ async function handleAdminMessage(message: IncomingWhatsAppMessage): Promise<voi
                 ? 'La lectura y reacciòn de mensajes esta ACTIVO.'
                 : 'La lectura y reacciòn de mensajes esta PAUSADO.',
         );
+
         return;
     }
 
     // Command -7: stop saving and processing incoming group messages.
     if (command === '-7') {
         reactionSchedulingEnabled = false;
+
         await sendWhatsAppMessage(
             replyTo,
             'La reacciòn de mensajes de grupos ha sido detenido.',
         );
+
         return;
     }
 
     // Command -8: resume saving and processing incoming group messages.
     if (command === '-8') {
         reactionSchedulingEnabled = true;
+
         const scheduledJobs = await scheduleReactionJobs();
+
         await sendWhatsAppMessage(
             replyTo,
             [
@@ -262,15 +292,20 @@ async function handleAdminMessage(message: IncomingWhatsAppMessage): Promise<voi
                 `Reacciones programadas: ${scheduledJobs}`,
             ].join('\n'),
         );
-        
+
         return;
     }
 
+    // Command -9: show the current CREATING batch.
     if (command === '-9') {
         const batch = await findLastCreatingBatch();
 
         if (!batch) {
-            await sendWhatsAppMessage(replyTo, 'No hay un batch activo en estado CREATING.');
+            await sendWhatsAppMessage(
+                replyTo,
+                'No hay un batch activo en estado CREATING.',
+            );
+
             return;
         }
 
@@ -287,21 +322,33 @@ async function handleAdminMessage(message: IncomingWhatsAppMessage): Promise<voi
                 `Identifiers: ${identifierCount}`,
             ].join('\n'),
         );
-        return
+
+        return;
     }
 
-
+    // Handle batch ID requested by command -2.
     if (awaitingBatchId) {
         if (!/^\d+$/.test(command)) {
-            await sendWhatsAppMessage(replyTo, 'El id del batch debe ser un numero entero.');
+            await sendWhatsAppMessage(
+                replyTo,
+                'El id del batch debe ser un numero entero.',
+            );
+
             return;
         }
 
         awaitingBatchId = false;
-        const batchIdentifiers = await findIdentifiersByBatchId(Number(command));
+
+        const batchIdentifiers = await findIdentifiersByBatchId(
+            Number(command),
+        );
 
         if (batchIdentifiers.length === 0) {
-            await sendWhatsAppMessage(replyTo, `No hay identificadores para el batch ${command}.`);
+            await sendWhatsAppMessage(
+                replyTo,
+                `No hay identificadores para el batch ${command}.`,
+            );
+
             return;
         }
 
@@ -309,48 +356,75 @@ async function handleAdminMessage(message: IncomingWhatsAppMessage): Promise<voi
 
         for (const item of batchIdentifiers) {
             const groupName = item.chatName ?? 'Sin nombre';
-            const groupIdentifiers = groupedIdentifiers.get(groupName) ?? [];
+
+            const groupIdentifiers =
+                groupedIdentifiers.get(groupName) ?? [];
+
             groupIdentifiers.push(item.identifier);
             groupedIdentifiers.set(groupName, groupIdentifiers);
         }
 
         const response = [...groupedIdentifiers.entries()]
-            .map(([groupName, identifiers]) => [groupName, ...identifiers].join('\n'))
+            .map(([groupName, identifiers]) =>
+                [groupName, ...identifiers].join('\n'),
+            )
             .join('\n\n');
 
         await sendWhatsAppMessage(replyTo, response);
+
         return;
     }
 
+    // Handle batch ID requested by command -3/-4.
     if (awaitingZipBatchId) {
         if (!/^\d+$/.test(command)) {
-            await sendWhatsAppMessage(replyTo, 'El numero del batch debe ser un entero.');
+            await sendWhatsAppMessage(
+                replyTo,
+                'El numero del batch debe ser un entero.',
+            );
+
             return;
         }
 
         zipBatchId = Number(command);
         awaitingZipBatchId = false;
-        await sendWhatsAppMessage(replyTo, 'Envie el archivo ZIP con los PDFs.');
+
+        await sendWhatsAppMessage(
+            replyTo,
+            'Envie el archivo ZIP con los PDFs.',
+        );
+
         return;
     }
 
+    // Handle batch ID requested by command -5.
     if (awaitingScheduleBatchId) {
         if (!/^\d+$/.test(command)) {
-            await sendWhatsAppMessage(replyTo, 'El numero del batch debe ser un entero.');
+            await sendWhatsAppMessage(
+                replyTo,
+                'El numero del batch debe ser un entero.',
+            );
+
             return;
         }
 
         awaitingScheduleBatchId = false;
-        const scheduledJobs = await scheduleDocumentJobsByBatch(Number(command));
+
+        const scheduledJobs = await scheduleDocumentJobsByBatch(
+            Number(command),
+        );
+
         await sendWhatsAppMessage(
             replyTo,
             scheduledJobs > 0
                 ? `${scheduledJobs} archivo(s) programado(s) para envio.`
                 : `No hay archivos pendientes sin fecha para el batch ${command}.`,
         );
+
         return;
     }
 
+    // Process the ZIP file after the administrator sends it.
     if (zipBatchId !== null && !command) {
         try {
             const result = await saveZipDocuments(
@@ -376,7 +450,9 @@ async function handleAdminMessage(message: IncomingWhatsAppMessage): Promise<voi
                     '',
                     `Identificadores sin documento: ${result.missingIdentifiers.length}`,
                     result.missingIdentifiers.length > 0
-                        ? formatMissingIdentifiers(result.missingIdentifiers)
+                        ? formatMissingIdentifiers(
+                            result.missingIdentifiers,
+                        )
                         : 'Ninguno',
                     '',
                 ].join('\n'),
@@ -394,9 +470,11 @@ async function handleAdminMessage(message: IncomingWhatsAppMessage): Promise<voi
             );
 
             awaitingZipAction = true;
-
         } catch (error) {
-            await sendWhatsAppMessage(replyTo, `No se pudo procesar el ZIP: ${String(error)}`);
+            await sendWhatsAppMessage(
+                replyTo,
+                `No se pudo procesar el ZIP: ${String(error)}`,
+            );
         } finally {
             zipBatchId = null;
         }
@@ -409,10 +487,12 @@ async function sendUnmatchedDocuments(
         batchId: number;
     },
 ): Promise<void> {
-    const unmatchedDirectory = `./data/unmatched/batch-${result.batchId}`;
+    const unmatchedDirectory =
+        `./data/unmatched/batch-${result.batchId}`;
 
     for (const filename of result.unmatched) {
-        const filePath = `${unmatchedDirectory}/${filename}`;
+        const filePath =
+            `${unmatchedDirectory}/${filename}`;
 
         const job = await createJob({
             type: 'SEND_UNMATCHED_DOCUMENT',
@@ -426,15 +506,16 @@ async function sendUnmatchedDocuments(
 
 async function scheduleMissingIdentifierNotifications(
     missingIdentifiers: Array<{
+        identifierId: number;
         messageId: number;
         chatName: string | null;
         identifier: string;
     }>,
 ): Promise<void> {
     for (const item of missingIdentifiers) {
-        const existingJob = await findJobByTypeAndMessage(
+        const existingJob = await findJobByTypeAndIdentifier(
             'SEND_MISSING_IDENTIFIER',
-            item.messageId,
+            item.identifierId,
         );
 
         if (existingJob) {
@@ -444,6 +525,7 @@ async function scheduleMissingIdentifierNotifications(
         const job = await createJob({
             type: 'SEND_MISSING_IDENTIFIER',
             messageId: item.messageId,
+            identifierId: item.identifierId,
             scheduledAt: null,
         });
 
@@ -453,6 +535,8 @@ async function scheduleMissingIdentifierNotifications(
 
 function formatMissingIdentifiers(
     missingIdentifiers: Array<{
+        identifierId: number;
+        messageId: number;
         chatName: string | null;
         identifier: string;
     }>,
@@ -461,38 +545,51 @@ function formatMissingIdentifiers(
 
     for (const item of missingIdentifiers) {
         const groupName = item.chatName ?? 'Sin nombre';
-        const identifiers = groupedIdentifiers.get(groupName) ?? [];
+
+        const identifiers =
+            groupedIdentifiers.get(groupName) ?? [];
+
         identifiers.push(item.identifier);
         groupedIdentifiers.set(groupName, identifiers);
     }
 
     return [...groupedIdentifiers.entries()]
-        .map(([groupName, identifiers]) => [groupName, ...identifiers].join('\n'))
+        .map(([groupName, identifiers]) =>
+            [groupName, ...identifiers].join('\n'),
+        )
         .join('\n\n');
 }
 
-export async function handleIncomingMessage(message: IncomingWhatsAppMessage): Promise<void> {
+export async function handleIncomingMessage(
+    message: IncomingWhatsAppMessage,
+): Promise<void> {
     try {
         const chatId = message.from;
 
+        // Ignore private chats except the administrator.
         if (!chatId.endsWith('@g.us')) {
-            console.log(chatId,'chatID');
+            console.log(chatId, 'chatID');
+
             if (chatId === ADMIN_JID) {
                 await handleAdminMessage(message);
             } else {
                 console.log('Ignoring private chat');
             }
+
             return;
         }
 
-        // Ignore messages sent by the bot itself and messages from groups if group message processing is disabled.
+        // Ignore messages sent by the bot itself.
         if (message.key.fromMe) {
             console.log('Ignoring message sent by myself');
             return;
         }
 
-        const groupName = whatsappGroups[chatId] ?? chatId;
-        const identifiers = detectIdentifiers(message.body);
+        const groupName =
+            whatsappGroups[chatId] ?? chatId;
+
+        const identifiers =
+            detectIdentifiers(message.body);
 
         if (identifiers.length === 0) {
             return;
@@ -503,18 +600,26 @@ export async function handleIncomingMessage(message: IncomingWhatsAppMessage): P
             name: groupName,
             isGroup: true,
         });
-        const messageDatetime = new Date(message.timestamp * 1000);
-        const whatsappMessageId = JSON.stringify(message.key);
-        const savedMessage = await findOrCreateMessage({
-            whatsappMessageId,
-            chatId: chat.id,
-            senderName: message.senderName,
-            senderId: message.author ?? '',
-            body: message.body,
-            messageDatetime,
-        });
 
-        const batch = await findOrCreateCreatingBatch();
+        const messageDatetime =
+            new Date(message.timestamp * 1000);
+
+        const whatsappMessageId =
+            JSON.stringify(message.key);
+
+        const savedMessage =
+            await findOrCreateMessage({
+                whatsappMessageId,
+                chatId: chat.id,
+                senderName: message.senderName,
+                senderId: message.author ?? '',
+                body: message.body,
+                messageDatetime,
+            });
+
+        const batch =
+            await findOrCreateCreatingBatch();
+
         await createIdentifiers(
             identifiers.map((identifier) => ({
                 messageId: savedMessage.id,
@@ -525,21 +630,28 @@ export async function handleIncomingMessage(message: IncomingWhatsAppMessage): P
             })),
         );
 
-        const existingReactionJob = await findJobByTypeAndMessage(
-            'REACT_MESSAGE',
-            savedMessage.id,
-        );
+        const existingReactionJob =
+            await findJobByTypeAndMessage(
+                'REACT_MESSAGE',
+                savedMessage.id,
+            );
 
         if (!existingReactionJob) {
             await createJob({
                 type: 'REACT_MESSAGE',
                 messageId: savedMessage.id,
-                //validate that the scheduledAt is set only if reactionSchedulingEnabled is true, otherwise it should be null
                 scheduledAt: reactionSchedulingEnabled
-                    ? new Date(Date.now() + randomReactionDelay()) : null,
+                    ? new Date(
+                        Date.now() +
+                        randomReactionDelay(),
+                    )
+                    : null,
             });
         }
     } catch (error) {
-        console.error('Error processing message:', error);
+        console.error(
+            'Error processing message:',
+            error,
+        );
     }
 }
