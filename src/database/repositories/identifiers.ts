@@ -1,5 +1,5 @@
 import { db } from '../client.js';
-import { eq, and, asc } from "drizzle-orm";
+import { desc, eq, and, asc, sql } from 'drizzle-orm';
 import { batches, chats, identifiers, messages } from '../schema/index.js';
 
 export async function findIdentifier(
@@ -85,4 +85,72 @@ export async function findIdentifierById(identifierId: number) {
         .from(identifiers)
         .where(eq(identifiers.id, identifierId))
         .get();
+}
+
+export async function findLatestIdentifier(
+    value: string,
+    type: string,
+) {
+    return db
+        .select({
+            identifierId: identifiers.id,
+            messageId: identifiers.messageId,
+            chatId: identifiers.chatId,
+            batchId: identifiers.batchId,
+            value: identifiers.value,
+            type: identifiers.type,
+        })
+        .from(identifiers)
+        .innerJoin(
+            messages,
+            eq(identifiers.messageId, messages.id),
+        )
+        .where(
+            and(
+                eq(identifiers.value, value),
+                eq(identifiers.type, type),
+                eq(messages.isDeleted, false),
+            ),
+        )
+        .orderBy(desc(identifiers.id))
+        .limit(1)
+        .get();
+}
+
+export async function moveIdentifierToBatch(
+    identifierId: number,
+    batchId: number,
+) {
+    return db
+        .update(identifiers)
+        .set({
+            batchId,
+        })
+        .where(eq(identifiers.id, identifierId))
+        .returning()
+        .get();
+}
+
+export async function findIdentifiersByMessageId(
+    messageId: number,
+) {
+    return db
+        .select()
+        .from(identifiers)
+        .where(eq(identifiers.messageId, messageId))
+        .all();
+}
+
+export async function moveIdentifiersByMessageToBatch(
+    messageId: number,
+    batchId: number,
+) {
+    return db
+        .update(identifiers)
+        .set({
+            batchId,
+        })
+        .where(eq(identifiers.messageId, messageId))
+        .returning()
+        .all();
 }

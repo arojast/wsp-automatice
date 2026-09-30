@@ -5,12 +5,18 @@ import { findOrCreateMessage } from '../database/repositories/messages.js';
 import {
     createIdentifiers,
     findIdentifiersByBatchId,
+    findLatestIdentifier,
+    moveIdentifierToBatch,
+    findIdentifiersByMessageId,
+    moveIdentifiersByMessageToBatch,
 } from '../database/repositories/identifiers.js';
 import {
     findOrCreateCreatingBatch,
     markCreatingBatchAsSent,
     findLastCreatingBatch,
+    findBatchById,
     countIdentifiersByBatch,
+    createBatch,
 } from '../database/repositories/batches.js';
 import {
     createJob,
@@ -49,6 +55,13 @@ let pendingZipResult: {
     batchId: number;
 } | null = null;
 
+let awaitingMoveIdentifierOption = false;
+let awaitingMoveIdentifierBatchId = false;
+let awaitingMoveIdentifier = false;
+
+let moveIdentifierOption: 'ACTIVE' | 'BATCH' | 'MESSAGE' | null = null;
+let moveIdentifierTargetBatchId: number | null = null;
+
 if (!configuredAdminJid) {
     throw new Error('ADMIN_WHATSAPP_JID is not configured');
 }
@@ -64,11 +77,53 @@ function randomReactionDelay(): number {
     );
 }
 
+/**
+ * Reset all temporary administrator workflow state.
+ *
+ * This allows a new command such as -0, -2, -3, -5 or -10
+ * to cancel any previous unfinished administrator workflow.
+ */
+function resetAdminWorkflow(): void {
+    awaitingBatchId = false;
+    awaitingZipBatchId = false;
+    awaitingScheduleBatchId = false;
+    awaitingZipAction = false;
+
+    awaitingMoveIdentifierOption = false;
+    awaitingMoveIdentifierBatchId = false;
+    awaitingMoveIdentifier = false;
+
+    zipBatchId = null;
+    scheduleZipJobs = true;
+    pendingZipResult = null;
+
+    moveIdentifierOption = null;
+    moveIdentifierTargetBatchId = null;
+}
+
 async function handleAdminMessage(
     message: IncomingWhatsAppMessage,
 ): Promise<void> {
     const command = message.body.trim();
     const replyTo = message.key.remoteJid ?? ADMIN_JID;
+
+    /*
+     * Any new administrator command cancels the previous workflow.
+     *
+     * Examples:
+     * - waiting for a batch ID
+     * - waiting for a ZIP
+     * - waiting for an identifier
+     * - waiting for a -10 option
+     *
+     * Normal workflow responses such as "1", "2", "3" do not start
+     * with "-", so they are not affected.
+     */
+    const isCommand = command.startsWith('-');
+
+    if (isCommand) {
+        resetAdminWorkflow();
+    }
 
     // Command -0: show the administrator command menu.
     if (command === '-0') {
@@ -86,6 +141,7 @@ async function handleAdminMessage(
                 '-7 Pausar reacciòn de mensajes de grupos',
                 '-8 Reactivar reacciòn de mensajes de grupos',
                 '-9 Mostrat el batch actual en estado CREATING y sus identificadores',
+                '-10 Cambiar identificador a otro batch',
             ].join('\n'),
         );
 
@@ -116,7 +172,8 @@ async function handleAdminMessage(
             ].join('\n'),
         );
 
-        const batchIdentifiers = await findIdentifiersByBatchId(sentBatch.id);
+        const batchIdentifiers =
+            await findIdentifiersByBatchId(sentBatch.id);
 
         await sendWhatsAppMessage(
             replyTo,
@@ -184,8 +241,6 @@ async function handleAdminMessage(
                 return;
 
             case '1':
-                // Send unmatched documents.
-                // Then schedule missing identifier notifications.
                 await sendUnmatchedDocuments(result);
 
                 await scheduleMissingIdentifierNotifications(
@@ -267,7 +322,7 @@ async function handleAdminMessage(
         return;
     }
 
-    // Command -7: stop saving and processing incoming group messages.
+    // Command -7: pause reaction scheduling.
     if (command === '-7') {
         reactionSchedulingEnabled = false;
 
@@ -279,7 +334,7 @@ async function handleAdminMessage(
         return;
     }
 
-    // Command -8: resume saving and processing incoming group messages.
+    // Command -8: resume reaction scheduling.
     if (command === '-8') {
         reactionSchedulingEnabled = true;
 
@@ -309,7 +364,8 @@ async function handleAdminMessage(
             return;
         }
 
-        const identifierCount = await countIdentifiersByBatch(batch.id);
+        const identifierCount =
+            await countIdentifiersByBatch(batch.id);
 
         await sendWhatsAppMessage(
             replyTo,
@@ -322,6 +378,262 @@ async function handleAdminMessage(
                 `Identifiers: ${identifierCount}`,
             ].join('\n'),
         );
+
+        return;
+    }
+
+    // Command -10: start the identifier move menu.
+    if (command === '-10') {
+        awaitingMoveIdentifierOption = true;
+        awaitingMoveIdentifierBatchId = false;
+        awaitingMoveIdentifier = false;
+        moveIdentifierOption = null;
+        moveIdentifierTargetBatchId = null;
+
+        await sendWhatsAppMessage(
+            replyTo,
+            [
+                'Seleccione una opcion:',
+                '1 = Cambiar identificador al batch activo',
+                '2 = Cambiar identificador a un batch especifico',
+                '3 = Cambiar todos los identificadores del mensaje a un nuevo batch',
+            ].join('\n'),
+        );
+
+        return;
+    }
+
+    // Handle the option selected after command -10.
+    if (awaitingMoveIdentifierOption) {
+        if (!['1', '2', '3'].includes(command)) {
+            await sendWhatsAppMessage(
+                replyTo,
+                [
+                    'Opcion invalida.',
+                    '',
+                    '1 = Cambiar identificador al batch activo',
+                    '2 = Cambiar identificador a un batch especifico',
+                    '3 = Cambiar todos los identificadores del mensaje a un nuevo batch',
+                ].join('\n'),
+            );
+
+            return;
+        }
+
+        awaitingMoveIdentifierOption = false;
+
+        if (command === '1') {
+            moveIdentifierOption = 'ACTIVE';
+            awaitingMoveIdentifier = true;
+
+            await sendWhatsAppMessage(
+                replyTo,
+                'Envie el identificador, solo se cambiara el ultimo que se ingreso',
+            );
+
+            return;
+        }
+
+        if (command === '2') {
+            moveIdentifierOption = 'BATCH';
+            awaitingMoveIdentifierBatchId = true;
+
+            await sendWhatsAppMessage(
+                replyTo,
+                'Ingrese el id del batch destino',
+            );
+
+            return;
+        }
+
+        if (command === '3') {
+            moveIdentifierOption = 'MESSAGE';
+            awaitingMoveIdentifier = true;
+
+            await sendWhatsAppMessage(
+                replyTo,
+                'Envie el identificador, solo se cambiara el ultimo que se ingreso',
+            );
+
+            return;
+        }
+    }
+
+    // Handle destination batch ID for command -10 option 2.
+    if (awaitingMoveIdentifierBatchId) {
+        if (!/^\d+$/.test(command)) {
+            await sendWhatsAppMessage(
+                replyTo,
+                'El id del batch debe ser un numero entero.',
+            );
+
+            return;
+        }
+
+        awaitingMoveIdentifierBatchId = false;
+        awaitingMoveIdentifier = true;
+
+        moveIdentifierOption = 'BATCH';
+        moveIdentifierTargetBatchId = Number(command);
+
+        await sendWhatsAppMessage(
+            replyTo,
+            'Envie el identificador, solo se cambiara el ultimo que se ingreso',
+        );
+
+        return;
+    }
+
+    // Handle identifier requested by command -10.
+    if (awaitingMoveIdentifier) {
+        const detectedIdentifiers =
+            detectIdentifiers(command);
+
+        if (detectedIdentifiers.length === 0) {
+            await sendWhatsAppMessage(
+                replyTo,
+                'No se encontro un identificador valido.',
+            );
+
+            // Finish processing the -10 command and reset the state.
+            awaitingMoveIdentifier = false;
+            moveIdentifierOption = null;
+            moveIdentifierTargetBatchId = null;
+
+            return;
+        }
+
+        // Only use the last identifier detected in the message.
+        const detectedIdentifier =
+            detectedIdentifiers[detectedIdentifiers.length - 1];
+
+        const identifier =
+            await findLatestIdentifier(
+                detectedIdentifier.value,
+                detectedIdentifier.type,
+            );
+
+        if (!identifier) {
+            await sendWhatsAppMessage(
+                replyTo,
+                `No se encontro el identificador ${detectedIdentifier.value}.`,
+            );
+
+            return;
+        }
+
+        // Option 1: move the identifier to the active CREATING batch.
+        if (moveIdentifierOption === 'ACTIVE') {
+            const activeBatch =
+                await findLastCreatingBatch();
+
+            if (!activeBatch) {
+                await sendWhatsAppMessage(
+                    replyTo,
+                    'No hay un batch activo en estado CREATING.',
+                );
+
+                return;
+            }
+
+            await moveIdentifierToBatch(
+                identifier.identifierId,
+                activeBatch.id,
+            );
+
+            await sendWhatsAppMessage(
+                replyTo,
+                [
+                    'Identificador cambiado:',
+                    identifier.value,
+                    '',
+                    `Batch: ${activeBatch.id}`,
+                ].join('\n'),
+            );
+        }
+
+        // Option 2: move the identifier to the selected batch.
+        if (moveIdentifierOption === 'BATCH') {
+            if (moveIdentifierTargetBatchId === null) {
+                await sendWhatsAppMessage(
+                    replyTo,
+                    'No se ha definido el batch destino.',
+                );
+
+                return;
+            }
+
+            const targetBatch =
+                await findBatchById(
+                    moveIdentifierTargetBatchId,
+                );
+
+            if (!targetBatch) {
+                await sendWhatsAppMessage(
+                    replyTo,
+                    `No existe el batch ${moveIdentifierTargetBatchId}.`,
+                );
+
+                return;
+            }
+
+            await moveIdentifierToBatch(
+                identifier.identifierId,
+                targetBatch.id,
+            );
+
+            await sendWhatsAppMessage(
+                replyTo,
+                [
+                    'Identificador cambiado:',
+                    identifier.value,
+                    '',
+                    `Batch: ${targetBatch.id}`,
+                ].join('\n'),
+            );
+        }
+
+        // Option 3: move all identifiers from the message to a new batch.
+        if (moveIdentifierOption === 'MESSAGE') {
+            const messageIdentifiers =
+                await findIdentifiersByMessageId(
+                    identifier.messageId,
+                );
+
+            if (messageIdentifiers.length === 0) {
+                await sendWhatsAppMessage(
+                    replyTo,
+                    'No se encontraron identificadores en el mensaje.',
+                );
+
+                return;
+            }
+
+            const newBatch = await createBatch();
+
+            const movedIdentifiers =
+                await moveIdentifiersByMessageToBatch(
+                    identifier.messageId,
+                    newBatch.id,
+                );
+
+            await sendWhatsAppMessage(
+                replyTo,
+                [
+                    'Identificadores cambiados:',
+                    ...movedIdentifiers.map(
+                        ({ value }) => value,
+                    ),
+                    '',
+                    `Nuevo batch: ${newBatch.id}`,
+                ].join('\n'),
+            );
+        }
+
+        // Reset -10 state.
+        awaitingMoveIdentifier = false;
+        moveIdentifierOption = null;
+        moveIdentifierTargetBatchId = null;
 
         return;
     }
@@ -339,9 +651,10 @@ async function handleAdminMessage(
 
         awaitingBatchId = false;
 
-        const batchIdentifiers = await findIdentifiersByBatchId(
-            Number(command),
-        );
+        const batchIdentifiers =
+            await findIdentifiersByBatchId(
+                Number(command),
+            );
 
         if (batchIdentifiers.length === 0) {
             await sendWhatsAppMessage(
@@ -352,25 +665,34 @@ async function handleAdminMessage(
             return;
         }
 
-        const groupedIdentifiers = new Map<string, string[]>();
+        const groupedIdentifiers =
+            new Map<string, string[]>();
 
         for (const item of batchIdentifiers) {
-            const groupName = item.chatName ?? 'Sin nombre';
+            const groupName =
+                item.chatName ?? 'Sin nombre';
 
             const groupIdentifiers =
                 groupedIdentifiers.get(groupName) ?? [];
 
             groupIdentifiers.push(item.identifier);
-            groupedIdentifiers.set(groupName, groupIdentifiers);
+            groupedIdentifiers.set(
+                groupName,
+                groupIdentifiers,
+            );
         }
 
-        const response = [...groupedIdentifiers.entries()]
-            .map(([groupName, identifiers]) =>
-                [groupName, ...identifiers].join('\n'),
-            )
-            .join('\n\n');
+        const response =
+            [...groupedIdentifiers.entries()]
+                .map(([groupName, identifiers]) =>
+                    [groupName, ...identifiers].join('\n'),
+                )
+                .join('\n\n');
 
-        await sendWhatsAppMessage(replyTo, response);
+        await sendWhatsAppMessage(
+            replyTo,
+            response,
+        );
 
         return;
     }
@@ -410,9 +732,10 @@ async function handleAdminMessage(
 
         awaitingScheduleBatchId = false;
 
-        const scheduledJobs = await scheduleDocumentJobsByBatch(
-            Number(command),
-        );
+        const scheduledJobs =
+            await scheduleDocumentJobsByBatch(
+                Number(command),
+            );
 
         await sendWhatsAppMessage(
             replyTo,
@@ -427,16 +750,20 @@ async function handleAdminMessage(
     // Process the ZIP file after the administrator sends it.
     if (zipBatchId !== null && !command) {
         try {
-            const result = await saveZipDocuments(
-                message,
-                zipBatchId,
-                scheduleZipJobs,
-            );
+            const result =
+                await saveZipDocuments(
+                    message,
+                    zipBatchId,
+                    scheduleZipJobs,
+                );
 
             pendingZipResult = {
-                missingIdentifiers: result.missingIdentifiers,
-                unmatched: result.unmatched,
-                batchId: zipBatchId,
+                missingIdentifiers:
+                    result.missingIdentifiers,
+                unmatched:
+                    result.unmatched,
+                batchId:
+                    zipBatchId,
             };
 
             await sendWhatsAppMessage(
@@ -513,10 +840,11 @@ async function scheduleMissingIdentifierNotifications(
     }>,
 ): Promise<void> {
     for (const item of missingIdentifiers) {
-        const existingJob = await findJobByTypeAndIdentifier(
-            'SEND_MISSING_IDENTIFIER',
-            item.identifierId,
-        );
+        const existingJob =
+            await findJobByTypeAndIdentifier(
+                'SEND_MISSING_IDENTIFIER',
+                item.identifierId,
+            );
 
         if (existingJob) {
             continue;
@@ -541,16 +869,21 @@ function formatMissingIdentifiers(
         identifier: string;
     }>,
 ): string {
-    const groupedIdentifiers = new Map<string, string[]>();
+    const groupedIdentifiers =
+        new Map<string, string[]>();
 
     for (const item of missingIdentifiers) {
-        const groupName = item.chatName ?? 'Sin nombre';
+        const groupName =
+            item.chatName ?? 'Sin nombre';
 
         const identifiers =
             groupedIdentifiers.get(groupName) ?? [];
 
         identifiers.push(item.identifier);
-        groupedIdentifiers.set(groupName, identifiers);
+        groupedIdentifiers.set(
+            groupName,
+            identifiers,
+        );
     }
 
     return [...groupedIdentifiers.entries()]
@@ -581,7 +914,10 @@ export async function handleIncomingMessage(
 
         // Ignore messages sent by the bot itself.
         if (message.key.fromMe) {
-            console.log('Ignoring message sent by myself');
+            console.log(
+                'Ignoring message sent by myself',
+            );
+
             return;
         }
 
@@ -595,11 +931,12 @@ export async function handleIncomingMessage(
             return;
         }
 
-        const chat = await findOrCreateChat({
-            whatsappChatId: chatId,
-            name: groupName,
-            isGroup: true,
-        });
+        const chat =
+            await findOrCreateChat({
+                whatsappChatId: chatId,
+                name: groupName,
+                isGroup: true,
+            });
 
         const messageDatetime =
             new Date(message.timestamp * 1000);
@@ -640,12 +977,13 @@ export async function handleIncomingMessage(
             await createJob({
                 type: 'REACT_MESSAGE',
                 messageId: savedMessage.id,
-                scheduledAt: reactionSchedulingEnabled
-                    ? new Date(
-                        Date.now() +
-                        randomReactionDelay(),
-                    )
-                    : null,
+                scheduledAt:
+                    reactionSchedulingEnabled
+                        ? new Date(
+                            Date.now() +
+                            randomReactionDelay(),
+                        )
+                        : null,
             });
         }
     } catch (error) {

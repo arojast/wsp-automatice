@@ -12,6 +12,14 @@ export async function findLastCreatingBatch() {
         .get();
 }
 
+export async function findBatchById(batchId: number) {
+    return db
+        .select()
+        .from(batches)
+        .where(eq(batches.id, batchId))
+        .get();
+}
+
 export async function createBatch() {
     const lastBatch = await db
         .select()
