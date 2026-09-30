@@ -27,14 +27,16 @@ import {
     scheduleReactionJobs,
 } from '../database/repositories/jobs.js';
 import {
+    getReactionActive,
+    setReactionActive,
+} from '../database/repositories/configuration.js';
+import {
     sendWhatsAppMessage,
     type IncomingWhatsAppMessage,
 } from './client.js';
 import { saveZipDocuments } from '../documents/zip-processor.js';
 
 const configuredAdminJid = process.env.ADMIN_WHATSAPP_JID;
-
-let reactionSchedulingEnabled = true;
 
 let awaitingBatchId = false;
 let awaitingZipBatchId = false;
@@ -312,11 +314,13 @@ async function handleAdminMessage(
 
     // Command -6: report whether incoming group messages are being processed.
     if (command === '-6') {
+        const reactionActive = await getReactionActive();
+
         await sendWhatsAppMessage(
             replyTo,
-            reactionSchedulingEnabled
-                ? 'La lectura y reacciòn de mensajes esta ACTIVO.'
-                : 'La lectura y reacciòn de mensajes esta PAUSADO.',
+            reactionActive
+                ? 'La reacciòn de mensajes esta ACTIVO.'
+                : 'La reacciòn de mensajes esta PAUSADO.',
         );
 
         return;
@@ -324,7 +328,7 @@ async function handleAdminMessage(
 
     // Command -7: pause reaction scheduling.
     if (command === '-7') {
-        reactionSchedulingEnabled = false;
+        await setReactionActive(false);
 
         await sendWhatsAppMessage(
             replyTo,
@@ -336,7 +340,7 @@ async function handleAdminMessage(
 
     // Command -8: resume reaction scheduling.
     if (command === '-8') {
-        reactionSchedulingEnabled = true;
+        await setReactionActive(true);
 
         const scheduledJobs = await scheduleReactionJobs();
 
@@ -974,11 +978,14 @@ export async function handleIncomingMessage(
             );
 
         if (!existingReactionJob) {
+            const reactionActive =
+                await getReactionActive();
+
             await createJob({
                 type: 'REACT_MESSAGE',
                 messageId: savedMessage.id,
                 scheduledAt:
-                    reactionSchedulingEnabled
+                    reactionActive
                         ? new Date(
                             Date.now() +
                             randomReactionDelay(),
