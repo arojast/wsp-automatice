@@ -35,6 +35,9 @@ import {
     type IncomingWhatsAppMessage,
 } from './client.js';
 import { saveZipDocuments } from '../documents/zip-processor.js';
+import {
+    countDocumentsSentTodayByChat,
+} from '../database/repositories/documents.js';
 
 const configuredAdminJid = process.env.ADMIN_WHATSAPP_JID;
 
@@ -144,6 +147,7 @@ async function handleAdminMessage(
                 '-8 Reactivar reacciòn de mensajes de grupos',
                 '-9 Mostrat el batch actual en estado CREATING y sus identificadores',
                 '-10 Cambiar identificador a otro batch',
+                '-11 Conteo final de archivos enviados del dia',
             ].join('\n'),
         );
 
@@ -403,6 +407,19 @@ async function handleAdminMessage(
                 '3 = Cambiar todos los identificadores del mensaje a un nuevo batch',
             ].join('\n'),
         );
+
+        return;
+    }
+
+    if (command === '-11') {
+        const counts = await countDocumentsSentTodayByChat();
+
+        for (const item of counts) {
+            await sendWhatsAppMessage(
+                item.whatsappChatId,
+                `Conteo final: ${item.count}`,
+            );
+        }
 
         return;
     }

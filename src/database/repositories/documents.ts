@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, gte, lt, sql } from 'drizzle-orm';
 import { db } from '../client.js';
 import { chats, documents, identifiers } from '../schema/index.js';
 
@@ -66,4 +66,49 @@ export async function markDocumentAsError(id: number) {
         .update(documents)
         .set({ status: 'ERROR' })
         .where(eq(documents.id, id));
+}
+
+export async function countDocumentsSentTodayByChat() {
+    const now = new Date();
+
+    const startOfDay = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate(),
+    );
+
+    const startOfTomorrow = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() + 1,
+    );
+
+    return db
+        .select({
+            whatsappChatId: chats.whatsappChatId,
+            chatName: chats.name,
+            count: sql<number>`count(${documents.id})`,
+        })
+        .from(documents)
+        .innerJoin(
+            identifiers,
+            eq(documents.identifierId, identifiers.id),
+        )
+        .innerJoin(
+            chats,
+            eq(identifiers.chatId, chats.id),
+        )
+        .where(
+            and(
+                eq(documents.status, 'SENT'),
+                gte(documents.sentAt, startOfDay),
+                lt(documents.sentAt, startOfTomorrow),
+            ),
+        )
+        .groupBy(
+            chats.id,
+            chats.whatsappChatId,
+            chats.name,
+        )
+        .all();
 }
