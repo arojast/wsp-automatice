@@ -52,7 +52,8 @@ export async function getLastScheduledAt(): Promise<Date> {
         return new Date();
     }
 
-    return date;
+    const now = new Date();
+    return date > now ? date : now;
 }
 
 export async function setLastScheduledAt(date: Date): Promise<void> {
