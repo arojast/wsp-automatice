@@ -86,6 +86,30 @@ export async function scheduleJobSequentially(
     return scheduledAt;
 }
 
+export async function scheduleJobWithRandomDelay(
+    jobId: number,
+    minimumSeconds = 30,
+    maximumSeconds = 60,
+): Promise<Date> {
+    const lastScheduledAt = await getLastScheduledAt();
+    const delaySeconds = Math.floor(
+        Math.random() * (maximumSeconds - minimumSeconds + 1)
+        + minimumSeconds,
+    );
+    const scheduledAt = new Date(
+        lastScheduledAt.getTime() + delaySeconds * 1_000,
+    );
+
+    await db
+        .update(jobs)
+        .set({ scheduledAt })
+        .where(eq(jobs.id, jobId));
+
+    await setLastScheduledAt(scheduledAt);
+
+    return scheduledAt;
+}
+
 export async function scheduleDocumentJobsByBatch(
     batchId: number,
 ): Promise<number> {

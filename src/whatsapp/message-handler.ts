@@ -24,6 +24,7 @@ import {
     findJobByTypeAndIdentifier,
     scheduleDocumentJobsByBatch,
     scheduleJobSequentially,
+    scheduleJobWithRandomDelay,
     scheduleReactionJobs,
 } from '../database/repositories/jobs.js';
 import {
@@ -427,7 +428,7 @@ async function handleAdminMessage(
                 scheduledAt: null,
             });
 
-            await scheduleJobSequentially(job.id);
+            await scheduleJobWithRandomDelay(job.id);
             jobsSaved += 1;
         }
 
