@@ -85,6 +85,7 @@ export async function countDocumentsSentTodayByChat() {
 
     return db
         .select({
+            chatId: chats.id,
             whatsappChatId: chats.whatsappChatId,
             chatName: chats.name,
             count: sql<number>`count(${documents.id})`,

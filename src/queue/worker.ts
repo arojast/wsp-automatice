@@ -10,6 +10,7 @@ import {
     markDocumentAsSent,
 } from '../database/repositories/documents.js';
 import { findIdentifierById } from '../database/repositories/identifiers.js';
+import { findChatById } from '../database/repositories/chats.js';
 import {
     reactToMessage,
     sendWhatsAppDocument,
@@ -110,6 +111,18 @@ async function processJob(job: typeof jobs.$inferSelect): Promise<void> {
             ) as WAMessageKey;
 
             await reactToMessage(messageKey, '👍');
+        } else if (job.type === 'SEND_DOCUMENT_COUNT') {
+            if (!job.chatId || !job.messageBody) {
+                throw new Error(`SEND_DOCUMENT_COUNT job ${job.id} is missing chatId or messageBody`);
+            }
+
+            const chat = await findChatById(job.chatId);
+
+            if (!chat) {
+                throw new Error(`Chat ${job.chatId} not found`);
+            }
+
+            await sendWhatsAppMessage(chat.whatsappChatId, job.messageBody);
         } else if (job.type === 'SEND_MISSING_IDENTIFIER') {
             if (!job.messageId) {
                 throw new Error(

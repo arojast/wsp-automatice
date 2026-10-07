@@ -413,13 +413,31 @@ async function handleAdminMessage(
 
     if (command === '-11') {
         const counts = await countDocumentsSentTodayByChat();
+        let jobsSaved = 0;
+        const totalDocumentsSent = counts.reduce(
+            (total, item) => total + item.count,
+            0,
+        );
 
         for (const item of counts) {
-            await sendWhatsAppMessage(
-                item.whatsappChatId,
-                `Conteo final: ${item.count}`,
-            );
+            const job = await createJob({
+                type: 'SEND_DOCUMENT_COUNT',
+                chatId: item.chatId,
+                messageBody: `Conteo final: ${item.count}`,
+                scheduledAt: null,
+            });
+
+            await scheduleJobSequentially(job.id);
+            jobsSaved += 1;
         }
+
+        await sendWhatsAppMessage(
+            replyTo,
+            [
+                `Jobs guardados: ${jobsSaved}`,
+                `Documentos enviados hoy: ${totalDocumentsSent}`,
+            ].join('\n'),
+        );
 
         return;
     }

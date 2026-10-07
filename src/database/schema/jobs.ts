@@ -3,6 +3,7 @@ import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { messages } from "./messages.js";
 import { identifiers } from "./identifiers.js";
 import { documents } from "./documents.js";
+import { chats } from "./chats.js";
 import { datetime } from "../types.js";
 
 export const jobStatuses = [
@@ -28,6 +29,10 @@ export const jobs = sqliteTable("jobs", {
         .references(() => documents.id),
 
     filePath: text("file_path"),
+
+    chatId: integer("chat_id")
+        .references(() => chats.id),
+    messageBody: text("message_body"),
 
     scheduledAt: datetime("scheduled_at"),
 

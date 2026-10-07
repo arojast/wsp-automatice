@@ -13,6 +13,8 @@ export async function createJob(data: {
     identifierId?: number;
     documentId?: number;
     filePath?: string;
+    chatId?: number;
+    messageBody?: string;
     scheduledAt: Date | null;
 }) {
     return db
@@ -23,6 +25,8 @@ export async function createJob(data: {
             identifierId: data.identifierId,
             documentId: data.documentId,
             filePath: data.filePath,
+            chatId: data.chatId,
+            messageBody: data.messageBody,
             scheduledAt: data.scheduledAt,
         })
         .returning()
